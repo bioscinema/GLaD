@@ -1,4 +1,4 @@
-# GLaD <img src="https://img.shields.io/badge/R%3E%3D3.6-blue.svg" align="right" height="20"/>
+# GLaD
 
 **Graph Laplacian-Based Distances and Diagnostics for Microbiome Data**
 
