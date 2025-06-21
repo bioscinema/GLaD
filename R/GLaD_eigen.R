@@ -20,7 +20,7 @@
 #' @importFrom phangorn Descendants
 #' @importFrom ape is.rooted Ntip Nnode
 #' @importFrom RSpectra eigs_sym
-#' @importFrom Matrix Diagonal as
+#' @importFrom Matrix Diagonal
 #' @export
 
 GLaD_eigen <- function(physeq, rho = 1, weighted = TRUE) {

@@ -3,8 +3,7 @@ Title: Graph Laplacian-Based Distances and Diagnostics for Microbiome Data
 Version: 0.1.0
 Authors@R: c(
     person("Zihan", "Zhu", email = "zxz1586@case.edu", role = c("aut", "cre")),
-    person("Yiqian", "Zhang", email = "zhang.16383@osu.edu", role = "aut")
-)
+    person("Yiqian", "Zhang", email = "zhang.16383@osu.edu", role = "aut"))
 Description: Provides functions for computing Graph Laplacian-based distances 
     (GLaD and GLaD_eigen) from phylogenetic trees, as well as diagnostic 
     utilities for evaluating clustering quality and structure preservation 
@@ -21,7 +20,8 @@ Imports:
     cluster,
     fpc,
     clusterCrit,
-    clue
+    clue,
+    methods
 License: GPL (>= 2)
 Encoding: UTF-8
 LazyData: true
