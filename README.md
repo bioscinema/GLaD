@@ -81,6 +81,7 @@ embed_eval <- evaluate_structure_preservation(D_glad)
 # install.packages("devtools")
 library(devtools)
 devtools::install_github("bioscinema/GLaD")
+library(GLaD)
 ```
 
 
