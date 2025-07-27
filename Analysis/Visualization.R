@@ -72,6 +72,43 @@ plot_df <- result %>%
     Rank_f        = factor(Rank, levels = sort(unique(Rank)))   # ordered factor
   )
 
+
+method_order <- plot_df %>%
+  group_by(Method) %>%
+  summarise(mean_rank = mean(Rank, na.rm = TRUE)) %>%
+  arrange(mean_rank) %>%
+  pull(Method)
+
+
+plot_df <- result %>%
+  rename(
+    Dataset     = source,
+    Method      = Dissimilarity,
+    PERMANOVA_F = pseudo_F,
+    MiRKAT_R2   = MiRKAT_Rsquared
+  ) %>%
+  filter(Method %in% method_order) %>%
+  mutate(Method = factor(Method, levels = method_order)) %>%     # strict order
+  group_by(Dataset) %>%
+  mutate(
+    F_rank  = rank(-PERMANOVA_F),   # larger F  ⇒ better (rank 1)
+    R2_rank = rank(-MiRKAT_R2)      # larger R² ⇒ better
+  ) %>%
+  pivot_longer(c(F_rank, R2_rank),
+               names_to  = "Metric",
+               values_to = "Rank") %>%
+  ungroup() %>%
+  mutate(
+    Metric        = recode(Metric,
+                           F_rank  = "PERMANOVA~F",
+                           R2_rank = "MiRKAT~R^2"),
+    Dataset_label = recode(Dataset, !!!dataset_labels),
+    Method_latex  = recode(as.character(Method), !!!method_latex_labels),
+    Method_latex  = factor(Method_latex,                        # keep y‑axis order
+                           levels = method_latex_labels[method_order]),
+    Rank_f        = factor(Rank, levels = sort(unique(Rank)))   # ordered factor
+  )
+
 # ── palette & size: same length as #ranks ────────────────────────────────────
 n_ranks   <- nlevels(plot_df$Rank_f)                        # e.g. 11
 rank_pal  <- colorRampPalette(c("#d7312d", "#f2724d","#fee395", "#fef9b7","#acd2e5", "#6090c1"))(n_ranks)
