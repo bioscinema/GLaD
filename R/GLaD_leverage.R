@@ -1,0 +1,78 @@
+#' GLaD OTU‑level leverage
+#'
+#' Computes “leverage” scores for each OTU under the \strong{GLaD}
+#' (\emph{Graph‑Laplacian‑based Dissimilarity}) framework.  
+#' The method forms a graph Laplacian
+#' \eqn{L = D - \rho A} from the tree’s adjacency matrix \eqn{A} (built by
+#' \code{\link{build_adjacency_matrix}}) and node‑degree matrix \eqn{D},
+#' then extracts the reciprocal Laplacian eigenvalues associated with each tip.
+#'
+#' @param physeq A \code{\link[phyloseq]{phyloseq}} object containing a rooted
+#'   phylogenetic tree with branch lengths.
+#' @param rho    Numeric scalar in \eqn{[0,1)} controlling the weight of
+#'   off‑diagonal adjacency entries; \eqn{\rho = 0} reduces to the ordinary
+#'   degree matrix, whereas \eqn{\rho \approx 1} approaches the classic graph
+#'   Laplacian.
+#'
+#' @return A list with two components
+#' \describe{
+#'   \item{\code{leverage}}{Data frame with columns
+#'     \code{OTU} and \code{eigenvalue}, where \code{eigenvalue} equals
+#'     \(1/\lambda_j\) for the eigenvalue \(\lambda_j\) of \eqn{L} that
+#'     corresponds to OTU \(j\).}
+#'   \item{\code{binary.tree}}{Logical indicating whether the phylogeny is
+#'     strictly bifurcating (\code{TRUE}) or contains polytomies (\code{FALSE}).}
+#' }
+#'
+#' @details
+#' Because the Laplacian of an \(N\)-tip tree is \(N \times N\), the function
+#' uses \code{\link[base]{eigen}} directly and may be slow for very large
+#' trees.  A commented‐out skeleton for a block‑wise \pkg{RSpectra} approach is
+#' included for future optimisation.
+#'
+#' @examples
+#' if (requireNamespace("phyloseq", quietly = TRUE)) {
+#'   set.seed(1)
+#'   toy_tree <- ape::rtree(4, rooted = TRUE)            # 4‑tip tree
+#'   toy_tab  <- matrix(1:16, 4, 4,                       # 4 OTUs × 4 samples
+#'                      dimnames = list(toy_tree$tip.label,
+#'                                      paste0("S", 1:4)))
+#'   ps <- phyloseq::phyloseq(
+#'          phyloseq::otu_table(toy_tab, taxa_are_rows = TRUE),
+#'          phyloseq::phy_tree(toy_tree))
+#'   GLaD_leverage(ps, rho = 0.3)
+#' }
+#'
+#' @import phyloseq
+#' @importFrom ape is.binary
+#' @export
+GLaD_leverage <- function(physeq, rho) {
+  ## phylogenetic leverage analysis for GLaD
+  tree <- phyloseq::phy_tree(physeq)
+  if (is.null(tree$edge.length)) {
+    stop("Tree does not contain branch lengths.")
+  }
+  
+  binary.tree <- ape::is.binary(tree)      # TRUE if strictly bifurcating
+  otu_labels  <- tree$tip.label
+  
+  ## Graph Laplacian L = D - rho * A
+  A <- build_adjacency_matrix(tree)
+  D <- diag(rowSums(A))
+  L <- D - rho * A
+  
+  ## Eigen‑decomposition
+  L.eigen <- eigen(L)
+  
+  ## Match tip positions and take reciprocal eigenvalues
+  L_names     <- rownames(L)
+  otu_indices <- match(otu_labels, L_names)
+  
+  otu_eigen_df <- data.frame(
+    OTU        = otu_labels,
+    eigenvalue = 1 / L.eigen$values[otu_indices],
+    row.names  = NULL
+  )
+  
+  list(leverage = otu_eigen_df, binary.tree = binary.tree)
+}

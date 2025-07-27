@@ -56,6 +56,36 @@ Assesses how well a distance matrix is preserved under dimensionality reduction 
 
 ---
 
+### `UniFrac_leverage()`
+
+Extracts OTU‑level branch‑length “leverage” values from a
+`phyloseq` object and flags whether the underlying tree is strictly
+binary.
+
+* **Returns**:  
+  * `$leverage` – data frame of *OTU, parent, child, length*  
+  * `$binary.tree` – logical (`TRUE` if bifurcating)
+
+---
+
+### `GLaD_leverage()`
+
+Computes Laplacian‑based leverage scores for each OTU under the GLaD
+framework.
+
+* **Input**: `phyloseq` object, `rho` (0 ≤ ρ < 1)  
+* **Returns**: list (`$leverage`, `$binary.tree`) as above
+
+---
+
+### `build_adjacency_matrix()`
+
+Low‑level helper that turns any `phylo` tree into a symmetric
+adjacency matrix. Most users will not call this directly, but it is
+exported for advanced work with graph algorithms.
+
+---
+
 ## Example Usage
 
 ```r
@@ -73,6 +103,10 @@ clust_eval <- evaluate_clustering_quality(D_glad, group = sample_labels)
 
 # Evaluate embedding structure
 embed_eval <- evaluate_structure_preservation(D_glad)
+
+# OTU leverage
+lev_uni  <- UniFrac_leverage(physeq_object)
+lev_glad <- GLaD_leverage(physeq_object, rho = 0.5)
 ```
 
 ## Installation
