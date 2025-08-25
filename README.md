@@ -78,11 +78,31 @@ framework.
 
 ---
 
-### `build_adjacency_matrix()`
 
-Low‑level helper that turns any `phylo` tree into a symmetric
-adjacency matrix. Most users will not call this directly, but it is
-exported for advanced work with graph algorithms.
+### `benchmark_beta_methods()`
+
+Runs a full benchmarking workflow over multiple beta-diversity distances, evaluates each using your
+existing evaluators, computes per-metric Borda scores (ranked **within metric & dataset**), and
+optionally makes a tournament plot.
+
+- **Input**
+  - `phyloseq` object
+  - `methods`: any mix of  
+    `Weighted Unifrac`, `Unweighted Unifrac`, `Generalized Unifrac`,  
+    `Weighted Glad1`, `Unweighted Glad1`, `Weighted Glad`, `Unweighted Glad`,  
+    `manhattan`, `euclidean`, `bray`, `jaccard`, `chisq`, `chord`, `hellinger`, `aitchison`
+  - `group`: sample grouping (column name in `sample_data(ps)` or a vector)
+  - `rho`: GLAD shrinkage (0 ≤ ρ < 1), `pseudocount` for Aitchison, `figure = TRUE/FALSE`,
+    `dataset_name` label
+- **Assumes these functions already exist in your environment**:
+  - `evaluate_clustering_quality(D, group)`
+  - `evaluate_structure_preservation(D, ord_dim)`
+- **Returns**
+  - `$table`: one row per method with metrics
+  - `$plot`: ggplot object (or `NULL` if `figure = FALSE`)
+
+**Requires**: `phyloseq`, `GUniFrac`, `vegan`, `dplyr`, `tidyr`, `ggplot2`, `ggbump`.
+
 
 ---
 
@@ -107,6 +127,21 @@ embed_eval <- evaluate_structure_preservation(D_glad)
 # OTU leverage
 lev_uni  <- UniFrac_leverage(physeq_object)
 lev_glad <- GLaD_leverage(physeq_object, rho = 0.5)
+
+# Benchmark a panel of distances and draw the tournament plot
+res <- benchmark_beta_methods(
+  physeq_object,
+  group = sample_data(physeq_object)$Group,   # or a vector the same length as samples
+  methods = c("Weighted Unifrac","Unweighted Unifrac","Generalized Unifrac",
+              "Weighted Glad1","Unweighted Glad1","Weighted Glad","Unweighted Glad",
+              "manhattan","euclidean","bray","jaccard","chisq","chord","hellinger","aitchison"),
+  rho = 0.5,
+  pseudocount = 0.5,
+  figure = TRUE,
+  dataset_name = "Gut"
+)
+res$table
+print(res$plot)
 ```
 
 ## Installation

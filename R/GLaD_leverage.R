@@ -76,3 +76,16 @@ GLaD_leverage <- function(physeq, rho) {
   
   list(leverage = otu_eigen_df, binary.tree = binary.tree)
 }
+
+# Internal utility: build adjacency matrix from phylo tree
+build_adjacency_matrix <- function(tree) {
+  N <- max(tree$edge)
+  A <- matrix(0, nrow = N, ncol = N)
+  for (i in 1:nrow(tree$edge)) {
+    parent <- tree$edge[i, 1]
+    child  <- tree$edge[i, 2]
+    A[parent, child] <- 1
+    A[child, parent] <- 1
+  }
+  A
+}

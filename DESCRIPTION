@@ -22,7 +22,10 @@ Imports:
     clusterCrit,
     clue,
     methods,
-    dplyr
+    dplyr,
+    GUniFrac,
+    ggplot2,
+    tidyr
 License: GPL (>= 2)
 Encoding: UTF-8
 LazyData: true
