@@ -1134,6 +1134,165 @@ write.csv(results_table, "CaseStudyResult/results_table_Concordance_oral_16S.csv
 ```
 
 
+# Concordance_oral_wgs
+```{r}
+load("~/Library/CloudStorage/Box-Box/WenhaoLi@MDA/BetaDiversity/real data/Concordance_oral/WGSphylo/WGSphylo_w_tree.Rdata")
+sample_data <- sample_data(physeq)
+rows_with_na <- apply(sample_data[, c(3, 2, 4, 5, 25, 27, 42, 43)], 1, function(x) any(x %in% c("missing", "not provided", "")))
+physeq <- prune_samples(!rows_with_na, physeq)
+
+# Prepare metadata
+metadata <- data.frame(
+  # Variable of interest bmi, sex, educ, host_age,raceethn, host_height,host_weight,adipnectin
+  crp = as.numeric(physeq@sam_data$crp),
+  bmi = as.numeric(physeq@sam_data$bmi),
+  sex = as.numeric(physeq@sam_data$sex),
+  educ = as.numeric(physeq@sam_data$educ),
+  host_age = as.numeric(physeq@sam_data$host_age),
+  raceethn = as.numeric(physeq@sam_data$raceethn),
+  host_height = as.numeric(physeq@sam_data$host_height),
+  host_weight = as.numeric(physeq@sam_data$host_weight)
+  
+)
+
+# OTU Table preparation
+otu_table <- otu_table(physeq)
+if (taxa_are_rows(physeq)) {
+  otu_table <- t(otu_table)
+}
+otu_matrix <- as.matrix(otu_table)
+
+# Define distance methods
+distance_methods <- c(
+  "GLaD_0.5_weighted","GLaD_0.5_unweighted","GLaD_1_weighted","GLaD_1_unweighted","manhattan", "euclidean", "canberra", "clark", "bray", "kulczynski", 
+  "jaccard", "gower", "altGower", "morisita", "horn", #"mountford", 
+  #"raup", 
+  "binomial", "chao", "cao", #"mahalanobis", 
+  "chisq", 
+  "chord", "hellinger", "aitchison", "robust.aitchison", "unifrac_unweighted", "unifrac_weighted_phyloseq", "unifrac_weighted_gunifrac","GUniFrac"
+)
+
+# Calculate dissimilarity matrices and run PERMANOVA
+check_distance <- list()
+evaluate_beta <- list()
+for (method in distance_methods) {
+  print(method)
+  if(method == "GLaD_0.5_weighted"){
+    dist_matrix <- GLaD::GLaD(physeq)
+  } else if(method == "GLaD_0.5_unweighted"){
+    dist_matrix <- GLaD::GLaD(physeq, weighted = F)
+  } else if(method == "GLaD_1_weighted"){
+    dist_matrix <- GLaD::GLaD_eigen(physeq)
+  } else if(method == "GLaD_1_unweighted"){
+    dist_matrix <- GLaD::GLaD_eigen(physeq, weighted = F)
+  }else if(method == "GUniFrac"){
+    otu_mat <- as(t(otu_table(physeq)), "matrix")  # Convert OTU table to matrix
+    tree <- phy_tree(physeq)  # Extract phylogenetic tree
+    unifrac_weight = GUniFrac(otu_mat, tree, alpha = c(0, 0.5, 1))$unifracs
+    #unifrac_matrix <- do.call(rbind, unifrac_weight)
+
+  # Ensure the matrix is numeric
+    #unifrac_matrix <- apply(unifrac_matrix, 2, as.numeric)
+    unifrac_weight = unifrac_weight[, , "d_0.5"]
+    # Compute UniFrac distances using GUniFrac
+    dist_matrix <-(unifrac_weight)
+  }
+  else if(method == "aitchison"){
+    tryCatch(
+      dist_matrix <- vegan::vegdist(otu_matrix, method = method, pseudocount = 0.5),
+      error = function(e) {
+        message(paste("Error in method:", method, ":", e$message))
+        NULL
+      }
+    )
+  } else if (method == "unifrac_unweighted") {
+    dist_matrix <-(phyloseq::distance(physeq, method = "unifrac", weighted = FALSE))
+  } else if (method == "unifrac_weighted_phyloseq") {
+    dist_matrix <-(phyloseq::distance(physeq, method = "unifrac", weighted = TRUE))
+  } else if (method == "unifrac_weighted_gunifrac"){
+    otu_mat <- as(t(otu_table(physeq)), "matrix")  # Convert OTU table to matrix
+    tree <- phy_tree(physeq)  # Extract phylogenetic tree
+    unifrac_weight = GUniFrac(otu_mat, tree, alpha = c(0, 0.5, 1))$unifracs
+    
+    unifrac_weight = unifrac_weight[, , "d_1"]
+    # Compute UniFrac distances using GUniFrac
+    dist_matrix <-(unifrac_weight)
+
+  }  else {
+      dist_matrix <- tryCatch(
+      vegan::vegdist(otu_matrix, method = method),
+      error = function(e) {
+        message(paste("Error in method:", method, ":", e$message))
+        NULL
+      }
+    )
+  }
+  
+  
+  if (!is.null(dist_matrix)) {
+    check_distance[[method]] <- (Betadiag::check_distance(as.matrix(dist_matrix)))
+    evaluate_beta[[method]] <-     Betadiag::evaluate_beta(as.matrix(dist_matrix),as.data.frame(metadata[,1]),metadata[,-1], metadata)
+  }
+}
+```
+
+
+```{r}
+# Initialize an empty data frame
+results_table <- data.frame(
+  Dissimilarity = character(),
+  IsMetric = character(),
+  IsEuclidean = character(),
+  FNI = numeric(),
+  
+  pseudo_F = numeric(),
+  pseudo_R2 = numeric(),
+  p_value = numeric(),
+  MiRKAT_Rsquared = numeric(),
+  
+  stringsAsFactors = FALSE
+)
+
+# List of dissimilarities
+methods <- names(check_distance)
+
+# Loop through each method and extract values
+for (method in methods) {
+  is_metric <- if (!is.null(check_distance[[method]]$is.metric)) 
+    ifelse(check_distance[[method]]$is.metric == 1, "YES", "NO") else NA
+  IsEuclidean <- if (!is.null(check_distance[[method]]$is.Euclidean)) ifelse(check_distance[[method]]$is.Euclidean == 1, "YES", "NO") else NA
+  FNI <- if (!is.null(check_distance[[method]]$FNI)) check_distance[[method]]$FNI else NA
+  
+
+  pseudo_F = evaluate_beta[[method]]$pseudo_F
+  pseudo_R2 = evaluate_beta[[method]]$pseudo_R2
+  p_value = evaluate_beta[[method]]$permanova_p
+  MiRKAT_Rsquared = evaluate_beta[[method]]$MiRKAT_R2
+
+
+  
+  # Append to results table
+  results_table <- rbind(results_table, data.frame(
+    Dissimilarity = as.character(method),
+    IsMetric = as.character(is_metric),
+    IsEuclidean = as.character(IsEuclidean),
+    FNI = as.numeric(FNI),
+    
+    
+    pseudo_F = as.numeric(pseudo_F),
+    pseudo_R2 = as.numeric(pseudo_R2),
+    p_value = as.numeric(p_value),
+    MiRKAT_Rsquared = as.numeric(MiRKAT_Rsquared),
+
+    stringsAsFactors = FALSE
+  ))
+}
+
+# Display the results table
+print(results_table)
+write.csv(results_table, "CaseStudyResult/results_table_Concordance_oral_wgs.csv", row.names = TRUE)
+```
+
 # Summarize
 
 ```{r}

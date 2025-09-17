@@ -34,7 +34,8 @@ method_latex_labels <- c(
 
 # dataset labels for the x‑axis
 dataset_labels <- c(
-  "Concordance_oral_16S" = "ORIGINS Oral Microbiome",
+  "Concordance_oral_wgs" = "ORIGINS Oral Microbiome (WGS)",
+  "Concordance_oral_16S" = "ORIGINS Oral Microbiome (16S)",
   "covid"                = "COVID-Gut Microbiome",
   "HIV_gut"              = "HIV-Gut Microbiome",
   "IBD_16s"              = "IBD Dataset (16S)",
@@ -73,11 +74,8 @@ plot_df <- result %>%
   )
 
 
-method_order <- plot_df %>%
-  group_by(Method) %>%
-  summarise(mean_rank = mean(Rank, na.rm = TRUE)) %>%
-  arrange(mean_rank) %>%
-  pull(Method)
+method_order <- ordered_methods
+
 
 
 plot_df <- result %>%
