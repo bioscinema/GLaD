@@ -85,21 +85,31 @@ GLaD <- function(physeq, rho = 0.5, weighted = TRUE) {
     (full_mat > 0) * 1
   }
   
-  nsamp <- nrow(rel_abund)
-  dist_mat <- matrix(0, nsamp, nsamp)
-  rownames(dist_mat) <- colnames(dist_mat) <- rownames(rel_abund)
-  
-  for (i in 1:(nsamp - 1)) {
-    for (j in (i + 1):nsamp) {
-      diff <- rel_abund[i, ] - rel_abund[j, ]
-      x <- solve(L_sparse, diff)
-      dist <- sqrt(sum(diff * x))
-      dist_mat[i, j] <- dist
-      dist_mat[j, i] <- dist
+  if (rho >= 0 || rho < 1) {
+    nsamp <- nrow(rel_abund)
+    dist_mat <- matrix(0, nsamp, nsamp)
+    rownames(dist_mat) <- colnames(dist_mat) <- rownames(rel_abund)
+    
+    for (i in 1:(nsamp - 1)) {
+      for (j in (i + 1):nsamp) {
+        diff <- rel_abund[i, ] - rel_abund[j, ]
+        x <- solve(L_sparse, diff)
+        dist <- sqrt(sum(diff * x))
+        dist_mat[i, j] <- dist
+        dist_mat[j, i] <- dist
+      }
     }
+    
+    as.dist(dist_mat)
+  } else if (rho = 1) {
+    proj <- rel_abund %*% U
+    scaled_proj <- sweep(proj, 2, sqrt(lambda), FUN = "/")
+    
+    dist(scaled_proj, method = "euclidean")
+  } else {
+    stop("Please check your rho value, rho should be 0 to 1.")
   }
   
-  as.dist(dist_mat)
 }
 
 # Internal utility: build adjacency matrix from phylo tree
