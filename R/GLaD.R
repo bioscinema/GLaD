@@ -101,7 +101,7 @@ GLaD <- function(physeq, rho = 0.5, weighted = TRUE) {
     }
     
     as.dist(dist_mat)
-  } else if (rho = 1) {
+  } else if (rho == 1) {
     proj <- rel_abund %*% U
     scaled_proj <- sweep(proj, 2, sqrt(lambda), FUN = "/")
     
