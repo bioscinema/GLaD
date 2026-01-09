@@ -1,0 +1,12 @@
+"Method","ORIGINS Oral Microbiome (16S)","ORIGINS Oral Microbiome (WGS)","COVID-Gut Microbiome","HIV-Gut Microbiome","IBD Dataset (16S)","IBD Dataset (WGS)","Pig Gut Microbiome"
+"Jaccard",6,7,8,5,7,7,9
+"Euclidean",11,1,9,11,6,8,10
+"Bray-Curtis",7,9,4,2,5,5,6
+"Aitchison",4,6,3,8,8,6,7
+"GUniFrac",5,4,6,4,4,4,4
+"Weighted UniFrac",8,8,2,10,11,11,2
+"Unweighted UniFrac",2,10,7,6,9,10,11
+"Weighted GLaD (rho = 1)",10,3,11,9,1,1,1
+"Unweighted GLaD (rho = 1)",1,5,1,1,3,2,5
+"Weighted GLaD (rho = 0.5)",9,2,10,7,2,3,3
+"Unweighted GLaD (rho = 0.5)",3,11,5,3,10,9,8
