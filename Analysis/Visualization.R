@@ -6,7 +6,8 @@ library(scales)      # for label_parse()
 
 # ── read data ────────────────────────────────────────────────────────────────
 result <- read.csv("CaseStudyResult/filtered_CaseStudyResult.csv")
-
+result <- result %>%
+  filter(source != "MouseGut")
 # ── helper vectors ───────────────────────────────────────────────────────────
 
 # 1. exact method order required on the y‑axis
@@ -40,7 +41,8 @@ dataset_labels <- c(
   "HIV_gut"              = "HIV-Gut Microbiome",
   "IBD_16s"              = "IBD Dataset (16S)",
   "IBD_wgs"              = "IBD Dataset (WGS)",
-  "Pig_gut"              = "Pig Gut Microbiome"
+  "Pig_gut"              = "Pig Gut Microbiome",
+  "tumor" = "Tumor Microbiome"
 )
 
 # ── wrangle & rank ───────────────────────────────────────────────────────────
