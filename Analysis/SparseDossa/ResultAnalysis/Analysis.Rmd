@@ -1,0 +1,3980 @@
+---
+title: "Analysis"
+author: "Yiqian Zhang"
+date: "2026-05-03"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+results <- read.csv("beta_div_sparse12_all_reps.csv", header = T)
+results = results %>%
+  filter(k <= 8)
+head(results)
+```
+
+```{r}
+library(dplyr)
+
+# Create output folder if it does not exist
+dir.create("cluster_summary_output", showWarnings = FALSE, recursive = TRUE)
+
+summary_table <- results %>%
+  select(
+    K = k,
+    k = signal_cluster,
+    `Signal Mode` = signal_mode,
+    `Overall abundance` = cluster_mean_relative_abundance,
+    `Within cluster COP` = within_cop_mean
+  ) %>%
+  distinct() %>%
+  mutate(
+    `Overall abundance` = round(`Overall abundance`, 6),
+    `Within cluster COP` = round(`Within cluster COP`, 4)
+  )
+
+# Save as CSV
+write.csv(
+  summary_table,
+  file = "cluster_summary_output/cluster_summary_table.csv",
+  row.names = FALSE
+)
+```
+
+
+# May 13
+
+## Weighted average power plots by beta and k
+
+```{r}
+## =========================================================
+## Weighted average power plots by beta and k
+## Two weighting ways:
+##   1) cluster_abund_sum_template
+##   2) cluster_abund_sum_template * cluster_mean_relative_abundance
+##
+## Visualization revisions:
+##   - smooth each line
+##   - keep raw dots
+##   - constrain smooth curves to [0, 1]
+##   - once power hits 1, keep smooth curve at 1 afterward
+##   - box around each subfigure
+##   - publication-ready legend labels
+##   - no title / subtitle
+## =========================================================
+
+options(stringsAsFactors = FALSE, width = 1000)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  library(grid)
+})
+
+alpha_level <- 0.05
+
+## Keep k <= 8
+results <- results %>%
+  filter(k <= 8)
+
+## ---------------------------------------------------------
+## Define colors ONLY for methods you want to include
+## If a method is not listed here, it will be excluded
+## AHC_euclidean is intentionally not included
+## ---------------------------------------------------------
+method_colors <- c(
+  "GLaD_0.5_unweighted"       = "#556B2F",
+  "GLaD_0.5_weighted"         = "#66CD00",
+  "GLaD_1_unweighted"         = "#76EE00",
+  "GLaD_1_weighted"           = "#84B12B",
+  "unifrac_unweighted"        = "#79CDCD",
+  "unifrac_weighted_phyloseq" = "#4A708B",
+  "GUniFrac"                  = "#6E93E8",
+  "aitchison"                 = "#D8902F",
+  "bray"                      = "#FF8C69",
+  "euclidean"                 = "#8B0000",
+  "jaccard"                   = "#EE8262"
+)
+
+## ---------------------------------------------------------
+## Publication-ready method labels
+## ---------------------------------------------------------
+method_labels <- c(
+  "GLaD_0.5_unweighted"       = "Unweighted GLaD (rho = 0.5)",
+  "GLaD_0.5_weighted"         = "Weighted GLaD (rho = 0.5)",
+  "GLaD_1_unweighted"         = "Unweighted GLaD (rho = 1)",
+  "GLaD_1_weighted"           = "Weighted GLaD (rho = 1)",
+  "unifrac_unweighted"        = "Unweighted UniFrac",
+  "unifrac_weighted_phyloseq" = "Weighted UniFrac",
+  "GUniFrac"                  = "GUniFrac",
+  "aitchison"                 = "Aitchison",
+  "bray"                      = "Bray-Curtis",
+  "euclidean"                 = "Euclidean",
+  "jaccard"                   = "Jaccard"
+)
+
+## ---------------------------------------------------------
+## Weighting options to plot
+## ---------------------------------------------------------
+weight_options <- c(
+  "abund_sum",
+  "abund_sum_x_mean_abund"
+)
+
+weight_labels <- c(
+  "abund_sum" = "Weighted by cluster abundance sum",
+  "abund_sum_x_mean_abund" = "Weighted by abundance sum × mean relative abundance"
+)
+
+## -------------------- check input --------------------
+if (!exists("results")) {
+  stop("Object 'results' is not found in your environment.")
+}
+
+if (!is.data.frame(results)) {
+  stop("'results' must be a data.frame.")
+}
+
+bad_cols <- intersect(c("X", "...1", "row.names"), names(results))
+if (length(bad_cols) > 0) {
+  results <- results[, setdiff(names(results), bad_cols), drop = FALSE]
+}
+
+p_cols <- grep("^p_", names(results), value = TRUE)
+if (length(p_cols) == 0) {
+  stop("No p-value columns beginning with 'p_' were found in results.")
+}
+
+needed_cols <- c(
+  "k",
+  "signal_cluster",
+  "beta",
+  "cluster_abund_sum_template",
+  "cluster_mean_relative_abundance"
+)
+
+missing_cols <- setdiff(needed_cols, names(results))
+if (length(missing_cols) > 0) {
+  stop(
+    "Missing required columns:\n",
+    paste(missing_cols, collapse = ", ")
+  )
+}
+
+has_signal_mode <- "signal_mode" %in% names(results)
+
+## -------------------- output folder --------------------
+outdir <- file.path(getwd(), "weighted_power_output")
+dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+
+cat("Output folder:\n", outdir, "\n\n")
+
+## -------------------- create long-format result --------------------
+select_cols <- c(
+  "k",
+  "signal_cluster",
+  "beta",
+  "cluster_abund_sum_template",
+  "cluster_mean_relative_abundance"
+)
+
+if (has_signal_mode) {
+  select_cols <- c(select_cols, "signal_mode")
+}
+
+long_res_base <- results %>%
+  select(all_of(select_cols), all_of(p_cols)) %>%
+  pivot_longer(
+    cols = all_of(p_cols),
+    names_to = "method",
+    values_to = "pval"
+  ) %>%
+  mutate(
+    method = sub("^p_", "", method),
+    reject = as.integer(pval < alpha_level)
+  ) %>%
+  filter(
+    beta > 0,
+    method %in% names(method_colors)
+  )
+
+## =========================================================
+## Smoothing helper
+##
+## Rules:
+##   1) smooth within each line
+##   2) clamp to [0, 1]
+##   3) if raw or smoothed power reaches 1,
+##      all later smooth values are set to 1
+## =========================================================
+
+smooth_one_curve <- function(dat, y_col = "weighted_power",
+                             n_grid = 200, span = 0.75,
+                             hit1_tol = 1e-8) {
+  
+  dat <- dat %>%
+    filter(!is.na(beta), !is.na(.data[[y_col]])) %>%
+    arrange(beta)
+  
+  if (nrow(dat) == 0) {
+    return(data.frame(beta = numeric(0), power_smooth = numeric(0)))
+  }
+  
+  x <- dat$beta
+  y <- dat[[y_col]]
+  
+  ux <- sort(unique(x))
+  
+  if (length(ux) == 1) {
+    out <- data.frame(
+      beta = ux,
+      power_smooth = mean(y, na.rm = TRUE)
+    )
+    
+    out$power_smooth <- pmin(pmax(out$power_smooth, 0), 1)
+    
+    if (any(y >= 1 - hit1_tol, na.rm = TRUE)) {
+      out$power_smooth <- 1
+    }
+    
+    return(out)
+  }
+  
+  grid_x <- seq(
+    min(x, na.rm = TRUE),
+    max(x, na.rm = TRUE),
+    length.out = n_grid
+  )
+  
+  pred_y <- NULL
+  
+  ## Try LOESS when enough beta points are available
+  if (length(ux) >= 4 && length(unique(y)) >= 2) {
+    
+    fit <- try(
+      loess(
+        formula = as.formula(paste0(y_col, " ~ beta")),
+        data = dat,
+        span = span,
+        degree = 2,
+        family = "gaussian",
+        control = loess.control(surface = "direct")
+      ),
+      silent = TRUE
+    )
+    
+    if (!inherits(fit, "try-error")) {
+      pred_try <- try(
+        predict(fit, newdata = data.frame(beta = grid_x)),
+        silent = TRUE
+      )
+      
+      if (!inherits(pred_try, "try-error") && !all(is.na(pred_try))) {
+        pred_y <- pred_try
+      }
+    }
+  }
+  
+  ## Fallback: linear interpolation
+  if (is.null(pred_y)) {
+    pred_y <- approx(
+      x = x,
+      y = y,
+      xout = grid_x,
+      ties = mean,
+      rule = 2
+    )$y
+  }
+  
+  ## Fill occasional NA predictions
+  if (any(is.na(pred_y))) {
+    good <- !is.na(pred_y)
+    
+    if (sum(good) >= 2) {
+      pred_y <- approx(
+        x = grid_x[good],
+        y = pred_y[good],
+        xout = grid_x,
+        rule = 2
+      )$y
+    } else {
+      pred_y[is.na(pred_y)] <- mean(y, na.rm = TRUE)
+    }
+  }
+  
+  ## Clamp to [0, 1]
+  pred_y <- pmin(pmax(pred_y, 0), 1)
+  
+  ## Once raw power reaches 1, keep all later smoothed values at 1
+  raw_hit_beta <- suppressWarnings(min(x[y >= 1 - hit1_tol], na.rm = TRUE))
+  
+  ## Also check whether the smoothed curve itself reaches 1
+  smooth_hit_beta <- suppressWarnings(min(grid_x[pred_y >= 1 - hit1_tol], na.rm = TRUE))
+  
+  hit_beta <- min(raw_hit_beta, smooth_hit_beta, na.rm = TRUE)
+  
+  if (is.finite(hit_beta)) {
+    pred_y[grid_x >= hit_beta] <- 1
+  }
+  
+  out <- data.frame(
+    beta = grid_x,
+    power_smooth = pred_y
+  )
+  
+  return(out)
+}
+
+## =========================================================
+## Main function for one weighting option
+## =========================================================
+
+make_weighted_power_plot <- function(weight_option) {
+  
+  cat("\n============================================================\n")
+  cat("Processing weighting option:", weight_option, "\n")
+  cat("============================================================\n\n")
+  
+  long_res <- long_res_base %>%
+    mutate(
+      weight = case_when(
+        weight_option == "abund_sum" ~
+          cluster_abund_sum_template,
+        weight_option == "abund_sum_x_mean_abund" ~
+          cluster_abund_sum_template * cluster_mean_relative_abundance,
+        TRUE ~ NA_real_
+      )
+    )
+  
+  if (any(is.na(long_res$weight))) {
+    stop("Some weights are NA for weight_option = ", weight_option)
+  }
+  
+  if (any(long_res$weight < 0, na.rm = TRUE)) {
+    stop("Some weights are negative for weight_option = ", weight_option)
+  }
+  
+  ## -------------------- weighted average power --------------------
+  if (has_signal_mode) {
+    
+    weighted_power <- long_res %>%
+      filter(!is.na(pval), !is.na(reject), !is.na(weight), weight > 0) %>%
+      group_by(k, signal_mode, beta, method) %>%
+      summarise(
+        weighted_power = weighted.mean(reject, w = weight, na.rm = TRUE),
+        n_nonmissing = sum(!is.na(pval)),
+        total_weight = sum(weight[!is.na(pval)], na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      arrange(k, signal_mode, beta, method)
+    
+  } else {
+    
+    weighted_power <- long_res %>%
+      filter(!is.na(pval), !is.na(reject), !is.na(weight), weight > 0) %>%
+      group_by(k, beta, method) %>%
+      summarise(
+        weighted_power = weighted.mean(reject, w = weight, na.rm = TRUE),
+        n_nonmissing = sum(!is.na(pval)),
+        total_weight = sum(weight[!is.na(pval)], na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      arrange(k, beta, method)
+  }
+  
+  weighted_power <- weighted_power %>%
+    mutate(
+      method = factor(method, levels = names(method_colors)),
+      weighted_power = pmin(pmax(weighted_power, 0), 1)
+    )
+  
+  ## -------------------- save unsmoothed table --------------------
+  write.csv(
+    weighted_power,
+    file = file.path(outdir, paste0("weighted_power_", weight_option, ".csv")),
+    row.names = FALSE
+  )
+  
+  cat("Weighted power table saved to:\n")
+  cat(file.path(outdir, paste0("weighted_power_", weight_option, ".csv")), "\n\n")
+  
+  print(as.data.frame(weighted_power), row.names = FALSE)
+  
+  ## -------------------- smooth --------------------
+  if (has_signal_mode) {
+    
+    smooth_power <- weighted_power %>%
+      group_by(k, signal_mode, method) %>%
+      group_modify(~ smooth_one_curve(
+        dat = .x,
+        y_col = "weighted_power",
+        n_grid = 200,
+        span = 0.75
+      )) %>%
+      ungroup()
+    
+  } else {
+    
+    smooth_power <- weighted_power %>%
+      group_by(k, method) %>%
+      group_modify(~ smooth_one_curve(
+        dat = .x,
+        y_col = "weighted_power",
+        n_grid = 200,
+        span = 0.75
+      )) %>%
+      ungroup()
+  }
+  
+  smooth_power <- smooth_power %>%
+    mutate(
+      method = factor(method, levels = names(method_colors)),
+      power_smooth = pmin(pmax(power_smooth, 0), 1)
+    )
+  
+  ## -------------------- save smoothed table --------------------
+  write.csv(
+    smooth_power,
+    file = file.path(outdir, paste0("weighted_power_", weight_option, "_smoothed.csv")),
+    row.names = FALSE
+  )
+  
+  cat("\nSmoothed weighted power table saved to:\n")
+  cat(file.path(outdir, paste0("weighted_power_", weight_option, "_smoothed.csv")), "\n\n")
+  
+  present_methods <- names(method_colors)[
+    names(method_colors) %in% as.character(unique(weighted_power$method))
+  ]
+  
+  ## -------------------- plot --------------------
+  p <- ggplot() +
+    geom_line(
+      data = smooth_power,
+      aes(
+        x = beta,
+        y = power_smooth,
+        color = method,
+        group = method
+      ),
+      linewidth = 0.95,
+      lineend = "round"
+    ) +
+    geom_point(
+      data = weighted_power,
+      aes(
+        x = beta,
+        y = weighted_power,
+        color = method,
+        group = method
+      ),
+      size = 0.80,
+      alpha = 0.85
+    ) +
+    scale_color_manual(
+      values = method_colors[present_methods],
+      breaks = present_methods,
+      labels = method_labels[present_methods],
+      drop = FALSE
+    ) +
+    scale_y_continuous(
+      limits = c(0, 1),
+      breaks = seq(0, 1, by = 0.25),
+      expand = expansion(mult = c(0.01, 0.01))
+    ) +
+    labs(
+      x = expression(beta),
+      y = "Weighted average power",
+      color = NULL
+    )
+  
+  if (has_signal_mode) {
+    p <- p +
+      facet_grid(signal_mode ~ k, labeller = label_both)
+  } else {
+    p <- p +
+      facet_wrap(~ k, labeller = label_both)
+  }
+  
+  p <- p +
+    theme_bw(base_size = 13, base_family = "serif") +
+    theme(
+      ## box around each subfigure
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 0.6),
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      panel.background = element_rect(fill = "white", color = NA),
+      
+      strip.background = element_rect(fill = "grey95", color = "black", linewidth = 0.5),
+      strip.text = element_text(face = "bold", size = 11),
+      
+      axis.title = element_text(face = "bold", size = 13),
+      axis.text = element_text(size = 11, color = "black"),
+      axis.line = element_line(color = "black", linewidth = 0.4),
+      axis.ticks = element_line(color = "black", linewidth = 0.4),
+      
+      legend.position = "right",
+      legend.title = element_blank(),
+      legend.text = element_text(size = 10),
+      legend.key = element_blank(),
+      legend.key.width = unit(1.2, "cm"),
+      legend.key.height = unit(0.42, "cm"),
+      
+      panel.spacing = unit(0.9, "lines")
+    ) +
+    guides(
+      color = guide_legend(
+        ncol = 1,
+        byrow = TRUE,
+        override.aes = list(
+          linewidth = 1.2,
+          size = 1.8,
+          alpha = 1
+        )
+      )
+    )
+  
+  print(p)
+  
+  ## -------------------- save plot --------------------
+  ggsave(
+    filename = file.path(outdir, paste0("weighted_power_lineplot_", weight_option, "_smooth.png")),
+    plot = p,
+    width = 14,
+    height = 8,
+    dpi = 300
+  )
+  
+  ggsave(
+    filename = file.path(outdir, paste0("weighted_power_lineplot_", weight_option, "_smooth.pdf")),
+    plot = p,
+    width = 14,
+    height = 8
+  )
+  
+  cat("\nSmoothed plot saved to:\n")
+  cat(file.path(outdir, paste0("weighted_power_lineplot_", weight_option, "_smooth.png")), "\n")
+  cat(file.path(outdir, paste0("weighted_power_lineplot_", weight_option, "_smooth.pdf")), "\n")
+  
+  invisible(list(
+    weighted_power = weighted_power,
+    smooth_power = smooth_power,
+    plot = p
+  ))
+}
+
+## =========================================================
+## Run both weighting figures
+## =========================================================
+
+plot_results <- list()
+
+for (w in weight_options) {
+  plot_results[[w]] <- make_weighted_power_plot(w)
+}
+
+cat("\nAll weighted power plots saved to:\n")
+cat(outdir, "\n")
+```
+## Smoothed power plot using the largest cluster only
+```{r}
+## =========================================================
+## Smoothed power plot using the largest cluster only
+##
+## Updates:
+## 1) each facet has a border box
+## 2) smoothed values are constrained to [0, 1]
+## 3) once the smoothed curve hits 1, it stays at 1 afterwards
+## 4) raw points are kept
+## 5) no title / subtitle
+## 6) publication-ready legend labels
+##
+## Output folder:
+##   weighted_power_output
+## =========================================================
+
+options(stringsAsFactors = FALSE, width = 1000)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  library(grid)
+})
+
+alpha_level <- 0.05
+
+## ---------------------------------------------------------
+## Define colors ONLY for methods you want to include
+## If a method is not listed here, it will be excluded
+## AHC_euclidean is intentionally not included
+##
+## Order here = legend order
+## ---------------------------------------------------------
+method_colors <- c(
+  "GLaD_0.5_unweighted"       = "#507D39",
+  "GLaD_0.5_weighted"         = "#8CB26C",
+  "GLaD_1_unweighted"         = "#AAC576",
+  "GLaD_1_weighted"           = "#D7E9BC",
+  "unifrac_unweighted"        = "#5A97D0",
+  "unifrac_weighted_phyloseq" = "#79B0D7",
+  "GUniFrac"                  = "#2F74B8",
+  "aitchison"                 = "#FFE082",
+  "bray"                      = "#FFCA28",
+  "euclidean"                 = "#FFB300",
+  "jaccard"                   = "#FF8F00"
+)
+
+## ---------------------------------------------------------
+## Publication-ready method labels
+## ---------------------------------------------------------
+method_labels <- c(
+  "GLaD_0.5_unweighted"       = "Unweighted GLaD (rho = 0.5)",
+  "GLaD_0.5_weighted"         = "Weighted GLaD (rho = 0.5)",
+  "GLaD_1_unweighted"         = "Unweighted GLaD (rho = 1)",
+  "GLaD_1_weighted"           = "Weighted GLaD (rho = 1)",
+  "unifrac_unweighted"        = "Unweighted UniFrac",
+  "unifrac_weighted_phyloseq" = "Weighted UniFrac",
+  "GUniFrac"                  = "GUniFrac",
+  "aitchison"                 = "Aitchison",
+  "bray"                      = "Bray-Curtis",
+  "euclidean"                 = "Euclidean",
+  "jaccard"                   = "Jaccard"
+)
+
+## -------------------- check input --------------------
+if (!exists("results")) {
+  stop("Object 'results' is not found in your environment.")
+}
+
+if (!is.data.frame(results)) {
+  stop("'results' must be a data.frame.")
+}
+
+bad_cols <- intersect(c("X", "...1", "row.names"), names(results))
+if (length(bad_cols) > 0) {
+  results <- results[, setdiff(names(results), bad_cols), drop = FALSE]
+}
+
+p_cols <- grep("^p_", names(results), value = TRUE)
+if (length(p_cols) == 0) {
+  stop("No p-value columns beginning with 'p_' were found in results.")
+}
+
+needed_cols <- c(
+  "k",
+  "signal_cluster",
+  "beta",
+  "cluster_n_otus_template"
+)
+
+missing_cols <- setdiff(needed_cols, names(results))
+if (length(missing_cols) > 0) {
+  stop(
+    "Missing required columns:\n",
+    paste(missing_cols, collapse = ", ")
+  )
+}
+
+has_signal_mode <- "signal_mode" %in% names(results)
+has_cluster_ordered <- "cluster_ordered" %in% names(results)
+
+## -------------------- output folder --------------------
+outdir <- file.path(getwd(), "weighted_power_output")
+dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+
+cat("Output folder:\n", outdir, "\n\n")
+
+## -------------------- define situation columns --------------------
+situation_cols <- c("k", "beta")
+if (has_signal_mode) {
+  situation_cols <- c("k", "signal_mode", "beta")
+}
+
+## -------------------- choose max-n-OTU cluster under each situation --------------------
+cluster_select_cols <- c(
+  situation_cols,
+  "signal_cluster",
+  "cluster_n_otus_template"
+)
+
+if (has_cluster_ordered) {
+  cluster_select_cols <- c(cluster_select_cols, "cluster_ordered")
+}
+
+cluster_choice <- results %>%
+  filter(beta > 0) %>%
+  select(all_of(cluster_select_cols)) %>%
+  distinct() %>%
+  {
+    if (has_cluster_ordered) {
+      arrange(
+        .,
+        across(all_of(situation_cols)),
+        desc(cluster_n_otus_template),
+        cluster_ordered,
+        signal_cluster
+      )
+    } else {
+      arrange(
+        .,
+        across(all_of(situation_cols)),
+        desc(cluster_n_otus_template),
+        signal_cluster
+      )
+    }
+  } %>%
+  group_by(across(all_of(situation_cols))) %>%
+  slice(1) %>%
+  ungroup()
+
+cat("Selected largest cluster under each situation:\n")
+print(as.data.frame(cluster_choice), row.names = FALSE)
+
+write.csv(
+  cluster_choice,
+  file = file.path(outdir, "selected_max_n_otu_cluster_by_situation.csv"),
+  row.names = FALSE
+)
+
+## -------------------- keep only selected clusters --------------------
+selected_results <- results %>%
+  filter(beta > 0) %>%
+  inner_join(
+    cluster_choice %>%
+      select(all_of(situation_cols), signal_cluster),
+    by = c(situation_cols, "signal_cluster")
+  )
+
+## -------------------- long-format p-values --------------------
+select_cols <- c(
+  situation_cols,
+  "signal_cluster",
+  "cluster_n_otus_template"
+)
+
+if (has_cluster_ordered) {
+  select_cols <- c(select_cols, "cluster_ordered")
+}
+
+long_res <- selected_results %>%
+  select(all_of(select_cols), all_of(p_cols)) %>%
+  pivot_longer(
+    cols = all_of(p_cols),
+    names_to = "method",
+    values_to = "pval"
+  ) %>%
+  mutate(
+    method = sub("^p_", "", method),
+    reject = as.integer(pval < alpha_level)
+  ) %>%
+  filter(method %in% names(method_colors))
+
+## -------------------- compute power for selected cluster only --------------------
+if (has_signal_mode) {
+  
+  max_n_otu_power <- long_res %>%
+    filter(!is.na(pval), !is.na(reject)) %>%
+    group_by(
+      k, signal_mode, beta,
+      signal_cluster, cluster_n_otus_template,
+      method
+    ) %>%
+    summarise(
+      power = mean(reject, na.rm = TRUE),
+      n_nonmissing = sum(!is.na(pval)),
+      .groups = "drop"
+    ) %>%
+    arrange(k, signal_mode, beta, method)
+  
+} else {
+  
+  max_n_otu_power <- long_res %>%
+    filter(!is.na(pval), !is.na(reject)) %>%
+    group_by(
+      k, beta,
+      signal_cluster, cluster_n_otus_template,
+      method
+    ) %>%
+    summarise(
+      power = mean(reject, na.rm = TRUE),
+      n_nonmissing = sum(!is.na(pval)),
+      .groups = "drop"
+    ) %>%
+    arrange(k, beta, method)
+}
+
+max_n_otu_power <- max_n_otu_power %>%
+  mutate(
+    method = factor(method, levels = names(method_colors))
+  )
+
+## -------------------- save unsmoothed power table --------------------
+write.csv(
+  max_n_otu_power,
+  file = file.path(outdir, "max_n_otu_cluster_power.csv"),
+  row.names = FALSE
+)
+
+cat("\nPower table saved to:\n")
+cat(file.path(outdir, "max_n_otu_cluster_power.csv"), "\n\n")
+
+print(as.data.frame(max_n_otu_power), row.names = FALSE)
+
+## =========================================================
+## Smoothing helper
+##
+## Rules:
+## 1) smooth within each line
+## 2) clamp to [0, 1]
+## 3) once the smoothed curve hits 1, keep all later values at 1
+## =========================================================
+
+smooth_one_curve <- function(dat, n_grid = 200, span = 0.75, hit1_tol = 1e-8) {
+  
+  dat <- dat %>%
+    filter(!is.na(beta), !is.na(power)) %>%
+    arrange(beta)
+  
+  if (nrow(dat) == 0) {
+    return(data.frame(beta = numeric(0), power_smooth = numeric(0)))
+  }
+  
+  x <- dat$beta
+  y <- dat$power
+  
+  ux <- sort(unique(x))
+  
+  ## only one unique beta
+  if (length(ux) == 1) {
+    out <- data.frame(
+      beta = ux,
+      power_smooth = mean(y, na.rm = TRUE)
+    )
+    out$power_smooth <- pmin(pmax(out$power_smooth, 0), 1)
+    
+    hit_idx <- which(out$power_smooth >= 1 - hit1_tol)
+    if (length(hit_idx) > 0) {
+      out$power_smooth[min(hit_idx):nrow(out)] <- 1
+    }
+    return(out)
+  }
+  
+  grid_x <- seq(min(x, na.rm = TRUE), max(x, na.rm = TRUE), length.out = n_grid)
+  
+  pred_y <- NULL
+  
+  ## try loess first if enough support
+  if (length(ux) >= 4 && length(unique(y)) >= 2) {
+    fit <- try(
+      loess(
+        power ~ beta,
+        data = dat,
+        span = span,
+        degree = 2,
+        family = "gaussian",
+        control = loess.control(surface = "direct")
+      ),
+      silent = TRUE
+    )
+    
+    if (!inherits(fit, "try-error")) {
+      pred_try <- try(
+        predict(fit, newdata = data.frame(beta = grid_x)),
+        silent = TRUE
+      )
+      
+      if (!inherits(pred_try, "try-error") && !all(is.na(pred_try))) {
+        pred_y <- pred_try
+      }
+    }
+  }
+  
+  ## fallback: linear interpolation
+  if (is.null(pred_y)) {
+    pred_y <- approx(
+      x = x,
+      y = y,
+      xout = grid_x,
+      ties = mean,
+      rule = 2
+    )$y
+  }
+  
+  ## fill NA if needed
+  if (any(is.na(pred_y))) {
+    good <- !is.na(pred_y)
+    pred_y <- approx(
+      x = grid_x[good],
+      y = pred_y[good],
+      xout = grid_x,
+      rule = 2
+    )$y
+  }
+  
+  ## clamp to [0, 1]
+  pred_y <- pmin(pmax(pred_y, 0), 1)
+  
+  ## once hit 1, remain at 1
+  hit_idx <- which(pred_y >= 1 - hit1_tol)
+  if (length(hit_idx) > 0) {
+    pred_y[min(hit_idx):length(pred_y)] <- 1
+  }
+  
+  out <- data.frame(
+    beta = grid_x,
+    power_smooth = pred_y
+  )
+  
+  return(out)
+}
+
+## -------------------- apply smoothing --------------------
+if (has_signal_mode) {
+  
+  smooth_power <- max_n_otu_power %>%
+    group_by(k, signal_mode, method) %>%
+    group_modify(~ smooth_one_curve(.x, n_grid = 200, span = 0.75)) %>%
+    ungroup()
+  
+} else {
+  
+  smooth_power <- max_n_otu_power %>%
+    group_by(k, method) %>%
+    group_modify(~ smooth_one_curve(.x, n_grid = 200, span = 0.75)) %>%
+    ungroup()
+}
+
+smooth_power <- smooth_power %>%
+  mutate(
+    method = factor(method, levels = names(method_colors)),
+    power_smooth = pmin(pmax(power_smooth, 0), 1)
+  )
+
+## -------------------- save smoothed table --------------------
+write.csv(
+  smooth_power,
+  file = file.path(outdir, "max_n_otu_cluster_power_smoothed.csv"),
+  row.names = FALSE
+)
+
+cat("\nSmoothed power table saved to:\n")
+cat(file.path(outdir, "max_n_otu_cluster_power_smoothed.csv"), "\n\n")
+
+## -------------------- methods actually present --------------------
+present_methods <- names(method_colors)[names(method_colors) %in% as.character(unique(max_n_otu_power$method))]
+
+## =========================================================
+## Plot
+## =========================================================
+
+p_max_n_otu_power_smooth <- ggplot() +
+  geom_line(
+    data = smooth_power,
+    aes(
+      x = beta,
+      y = power_smooth,
+      color = method,
+      group = method
+    ),
+    linewidth = 0.95,
+    lineend = "round"
+  ) +
+  geom_point(
+    data = max_n_otu_power,
+    aes(
+      x = beta,
+      y = power,
+      color = method,
+      group = method
+    ),
+    size = 0.80,
+    alpha = 0.85
+  ) +
+  scale_color_manual(
+    values = method_colors[present_methods],
+    breaks = present_methods,
+    labels = method_labels[present_methods],
+    drop = FALSE
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, by = 0.25),
+    expand = expansion(mult = c(0.01, 0.01))
+  ) +
+  labs(
+    x = expression(beta),
+    y = "Power",
+    color = NULL
+  )
+
+if (has_signal_mode) {
+  p_max_n_otu_power_smooth <- p_max_n_otu_power_smooth +
+    facet_grid(signal_mode ~ k, labeller = label_both)
+} else {
+  p_max_n_otu_power_smooth <- p_max_n_otu_power_smooth +
+    facet_wrap(~ k, labeller = label_both)
+}
+
+p_max_n_otu_power_smooth <- p_max_n_otu_power_smooth +
+  theme_bw(base_size = 13, base_family = "serif") +
+  theme(
+    ## facet boxes / subfigure boxes
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.6),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "white", color = NA),
+    
+    strip.background = element_rect(fill = "grey95", color = "black", linewidth = 0.5),
+    strip.text = element_text(face = "bold", size = 11),
+    
+    axis.title = element_text(face = "bold", size = 13),
+    axis.text = element_text(size = 11, color = "black"),
+    axis.line = element_line(color = "black", linewidth = 0.4),
+    axis.ticks = element_line(color = "black", linewidth = 0.4),
+    
+    legend.position = "right",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+    legend.key = element_blank(),
+    legend.key.width = unit(1.2, "cm"),
+    legend.key.height = unit(0.42, "cm"),
+    
+    panel.spacing = unit(0.9, "lines")
+  ) +
+  guides(
+    color = guide_legend(
+      ncol = 1,
+      byrow = TRUE,
+      override.aes = list(
+        linewidth = 1.2,
+        size = 1.8,
+        alpha = 1
+      )
+    )
+  )
+
+print(p_max_n_otu_power_smooth)
+
+## -------------------- save plot --------------------
+ggsave(
+  filename = file.path(outdir, "max_n_otu_cluster_power_lineplot_smooth.png"),
+  plot = p_max_n_otu_power_smooth,
+  width = 14,
+  height = 8,
+  dpi = 300
+)
+
+ggsave(
+  filename = file.path(outdir, "max_n_otu_cluster_power_lineplot_smooth.pdf"),
+  plot = p_max_n_otu_power_smooth,
+  width = 14,
+  height = 8
+)
+
+cat("\nSmoothed plots saved to:\n")
+cat(file.path(outdir, "max_n_otu_cluster_power_lineplot_smooth.png"), "\n")
+cat(file.path(outdir, "max_n_otu_cluster_power_lineplot_smooth.pdf"), "\n")
+```
+
+## Type I error table under each situation
+
+```{r}
+## =========================================================
+## Type I error table under each situation
+##
+## Three ways:
+## 1) abund_sum:
+##      weighted by cluster_abund_sum_template
+##
+## 2) abund_sum_x_mean_abund:
+##      weighted by cluster_abund_sum_template *
+##                  cluster_mean_relative_abundance
+##
+## 3) max_n_otu_cluster:
+##      select the cluster with maximum cluster_n_otus_template
+##      under each null situation
+##
+## Output:
+##   1) long-format table
+##   2) wide-format table with methods as columns
+##   3) one CSV per way
+##
+## Saved under:
+##   weighted_power_output
+## =========================================================
+
+options(stringsAsFactors = FALSE, width = 1000)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+})
+
+alpha_level <- 0.05
+
+## ---------------------------------------------------------
+## Methods to include
+## If a method is not listed here, it will be excluded.
+## AHC_euclidean is intentionally not included.
+##
+## Order here = table order
+## ---------------------------------------------------------
+method_order <- c(
+  "GLaD_0.5_unweighted",
+  "GLaD_0.5_weighted",
+  "GLaD_1_unweighted",
+  "GLaD_1_weighted",
+  "unifrac_unweighted",
+  "unifrac_weighted_phyloseq",
+  "GUniFrac",
+  "aitchison",
+  "bray",
+  "euclidean",
+  "jaccard"
+)
+
+## Publication-ready method names
+method_labels <- c(
+  "GLaD_0.5_unweighted"       = "Unweighted GLaD (rho = 0.5)",
+  "GLaD_0.5_weighted"         = "Weighted GLaD (rho = 0.5)",
+  "GLaD_1_unweighted"         = "Unweighted GLaD (rho = 1)",
+  "GLaD_1_weighted"           = "Weighted GLaD (rho = 1)",
+  "unifrac_unweighted"        = "Unweighted UniFrac",
+  "unifrac_weighted_phyloseq" = "Weighted UniFrac",
+  "GUniFrac"                  = "GUniFrac",
+  "aitchison"                 = "Aitchison",
+  "bray"                      = "Bray-Curtis",
+  "euclidean"                 = "Euclidean",
+  "jaccard"                   = "Jaccard"
+)
+
+## ---------------------------------------------------------
+## Checks
+## ---------------------------------------------------------
+if (!exists("results")) {
+  stop("Object 'results' is not found in your environment.")
+}
+
+if (!is.data.frame(results)) {
+  stop("'results' must be a data.frame.")
+}
+
+bad_cols <- intersect(c("X", "...1", "row.names"), names(results))
+if (length(bad_cols) > 0) {
+  results <- results[, setdiff(names(results), bad_cols), drop = FALSE]
+}
+
+p_cols <- grep("^p_", names(results), value = TRUE)
+if (length(p_cols) == 0) {
+  stop("No p-value columns beginning with 'p_' were found in results.")
+}
+
+needed_cols <- c(
+  "k",
+  "signal_cluster",
+  "beta",
+  "cluster_n_otus_template",
+  "cluster_abund_sum_template",
+  "cluster_mean_relative_abundance"
+)
+
+missing_cols <- setdiff(needed_cols, names(results))
+if (length(missing_cols) > 0) {
+  stop(
+    "Missing required columns:\n",
+    paste(missing_cols, collapse = ", ")
+  )
+}
+
+has_signal_mode <- "signal_mode" %in% names(results)
+has_cluster_ordered <- "cluster_ordered" %in% names(results)
+
+## ---------------------------------------------------------
+## Output folder
+## ---------------------------------------------------------
+outdir <- file.path(getwd(), "weighted_power_output")
+dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+
+cat("Output folder:\n", outdir, "\n\n")
+
+## ---------------------------------------------------------
+## Define situation columns
+## For type I error, beta is fixed at 0, so situation does not include beta.
+## ---------------------------------------------------------
+situation_cols <- "k"
+
+if (has_signal_mode) {
+  situation_cols <- c("k", "signal_mode")
+}
+
+## =========================================================
+## 1. Long null data: beta == 0
+## =========================================================
+
+select_cols <- c(
+  situation_cols,
+  "beta",
+  "signal_cluster",
+  "cluster_n_otus_template",
+  "cluster_abund_sum_template",
+  "cluster_mean_relative_abundance"
+)
+
+if (has_cluster_ordered) {
+  select_cols <- c(select_cols, "cluster_ordered")
+}
+
+null_long <- results %>%
+  filter(beta == 0) %>%
+  select(all_of(select_cols), all_of(p_cols)) %>%
+  pivot_longer(
+    cols = all_of(p_cols),
+    names_to = "method",
+    values_to = "pval"
+  ) %>%
+  mutate(
+    method = sub("^p_", "", method),
+    method = factor(method, levels = method_order),
+    false_reject = as.integer(pval < alpha_level)
+  ) %>%
+  filter(method %in% method_order)
+
+if (nrow(null_long) == 0) {
+  stop("No beta == 0 rows found after filtering. Cannot compute type I error.")
+}
+
+## =========================================================
+## 2. Way 1: weighted by cluster_abund_sum_template
+## =========================================================
+
+type1_abund_sum <- null_long %>%
+  mutate(
+    way = "abund_sum",
+    weight = cluster_abund_sum_template
+  ) %>%
+  filter(
+    !is.na(pval),
+    !is.na(false_reject),
+    !is.na(weight),
+    weight > 0
+  ) %>%
+  group_by(across(all_of(situation_cols)), method, way) %>%
+  summarise(
+    type1_error = weighted.mean(false_reject, w = weight, na.rm = TRUE),
+    n_nonmissing = sum(!is.na(pval)),
+    total_weight = sum(weight[!is.na(pval)], na.rm = TRUE),
+    .groups = "drop"
+  )
+
+## =========================================================
+## 3. Way 2: weighted by cluster_abund_sum_template * mean abundance
+## =========================================================
+
+type1_abund_sum_x_mean_abund <- null_long %>%
+  mutate(
+    way = "abund_sum_x_mean_abund",
+    weight = cluster_abund_sum_template * cluster_mean_relative_abundance
+  ) %>%
+  filter(
+    !is.na(pval),
+    !is.na(false_reject),
+    !is.na(weight),
+    weight > 0
+  ) %>%
+  group_by(across(all_of(situation_cols)), method, way) %>%
+  summarise(
+    type1_error = weighted.mean(false_reject, w = weight, na.rm = TRUE),
+    n_nonmissing = sum(!is.na(pval)),
+    total_weight = sum(weight[!is.na(pval)], na.rm = TRUE),
+    .groups = "drop"
+  )
+
+## =========================================================
+## 4. Way 3: select max cluster_n_otus_template under each null situation
+## =========================================================
+
+cluster_select_cols <- c(
+  situation_cols,
+  "signal_cluster",
+  "cluster_n_otus_template"
+)
+
+if (has_cluster_ordered) {
+  cluster_select_cols <- c(cluster_select_cols, "cluster_ordered")
+}
+
+max_cluster_choice_type1 <- results %>%
+  filter(beta == 0) %>%
+  select(all_of(cluster_select_cols)) %>%
+  distinct() %>%
+  {
+    if (has_cluster_ordered) {
+      arrange(
+        .,
+        across(all_of(situation_cols)),
+        desc(cluster_n_otus_template),
+        cluster_ordered,
+        signal_cluster
+      )
+    } else {
+      arrange(
+        .,
+        across(all_of(situation_cols)),
+        desc(cluster_n_otus_template),
+        signal_cluster
+      )
+    }
+  } %>%
+  group_by(across(all_of(situation_cols))) %>%
+  slice(1) %>%
+  ungroup()
+
+cat("Selected max-n-OTU cluster under each null situation:\n")
+print(as.data.frame(max_cluster_choice_type1), row.names = FALSE)
+
+write.csv(
+  max_cluster_choice_type1,
+  file = file.path(outdir, "type1_selected_max_n_otu_cluster_by_situation.csv"),
+  row.names = FALSE
+)
+
+null_long_max_cluster <- null_long %>%
+  inner_join(
+    max_cluster_choice_type1 %>%
+      select(all_of(situation_cols), signal_cluster),
+    by = c(situation_cols, "signal_cluster")
+  )
+
+type1_max_n_otu_cluster <- null_long_max_cluster %>%
+  filter(
+    !is.na(pval),
+    !is.na(false_reject)
+  ) %>%
+  mutate(
+    way = "max_n_otu_cluster"
+  ) %>%
+  group_by(
+    across(all_of(situation_cols)),
+    signal_cluster,
+    cluster_n_otus_template,
+    method,
+    way
+  ) %>%
+  summarise(
+    type1_error = mean(false_reject, na.rm = TRUE),
+    n_nonmissing = sum(!is.na(pval)),
+    .groups = "drop"
+  )
+
+## =========================================================
+## 5. Combine all three ways: long table
+## =========================================================
+
+type1_table_long <- bind_rows(
+  type1_abund_sum,
+  type1_abund_sum_x_mean_abund,
+  type1_max_n_otu_cluster
+) %>%
+  mutate(
+    method = factor(method, levels = method_order),
+    method_label = unname(method_labels[as.character(method)]),
+    way = factor(
+      way,
+      levels = c(
+        "abund_sum",
+        "abund_sum_x_mean_abund",
+        "max_n_otu_cluster"
+      )
+    )
+  ) %>%
+  arrange(way, across(all_of(situation_cols)), method)
+
+## round only for display/table export
+type1_table_long_round <- type1_table_long %>%
+  mutate(
+    type1_error = round(type1_error, 4),
+    total_weight = ifelse(
+      "total_weight" %in% names(.),
+      round(total_weight, 4),
+      NA_real_
+    )
+  )
+
+write.csv(
+  type1_table_long_round,
+  file = file.path(outdir, "type1_error_each_situation_long.csv"),
+  row.names = FALSE
+)
+
+cat("\nLong-format type I error table saved to:\n")
+cat(file.path(outdir, "type1_error_each_situation_long.csv"), "\n\n")
+
+## =========================================================
+## 6. Wide table: methods as columns
+## =========================================================
+
+type1_table_wide <- type1_table_long %>%
+  select(
+    all_of(situation_cols),
+    way,
+    method_label,
+    type1_error
+  ) %>%
+  mutate(
+    type1_error = round(type1_error, 4)
+  ) %>%
+  pivot_wider(
+    names_from = method_label,
+    values_from = type1_error
+  ) %>%
+  arrange(way, across(all_of(situation_cols)))
+
+write.csv(
+  type1_table_wide,
+  file = file.path(outdir, "type1_error_each_situation_wide.csv"),
+  row.names = FALSE
+)
+
+cat("Wide-format type I error table saved to:\n")
+cat(file.path(outdir, "type1_error_each_situation_wide.csv"), "\n\n")
+
+cat("============================================================\n")
+cat("TYPE I ERROR TABLE UNDER EACH SITUATION\n")
+cat("Wide format: one row = one situation and one way\n")
+cat("============================================================\n\n")
+
+print(as.data.frame(type1_table_wide), row.names = FALSE)
+
+## =========================================================
+## 7. Save one wide table per way
+## =========================================================
+
+for (ww in unique(as.character(type1_table_wide$way))) {
+  
+  tmp <- type1_table_wide %>%
+    filter(way == ww) %>%
+    select(-way)
+  
+  write.csv(
+    tmp,
+    file = file.path(outdir, paste0("type1_error_each_situation_", ww, ".csv")),
+    row.names = FALSE
+  )
+}
+
+cat("\nIndividual wide tables saved:\n")
+cat(file.path(outdir, "type1_error_each_situation_abund_sum.csv"), "\n")
+cat(file.path(outdir, "type1_error_each_situation_abund_sum_x_mean_abund.csv"), "\n")
+cat(file.path(outdir, "type1_error_each_situation_max_n_otu_cluster.csv"), "\n")
+```
+
+## Others
+
+```{r}
+## =========================================================
+## Published-ready power heatmaps under each situation
+##
+## Revised version:
+##   - one heatmap for each (k, signal_mode)
+##   - beta panels are wrapped into multiple rows
+##   - avoids ggsave dimension > 50 inches
+##   - color scale: highest power -> lowest power
+##       #D93F49, #E28187, #EBBFC2, #D5E1E3, #AFC9CF, #8FB4BE
+##
+## Heatmap:
+##   x-axis = method
+##   y-axis = signal cluster
+##   fill   = empirical power
+##
+## Output:
+##   weighted_power_output/power_heatmaps
+## =========================================================
+
+options(stringsAsFactors = FALSE, width = 1000)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  library(grid)
+})
+
+alpha_level <- 0.05
+
+## Optional: keep only k <= 8
+results <- results %>%
+  filter(k <= 8)
+
+## ---------------------------------------------------------
+## Methods to include and display order
+## ---------------------------------------------------------
+method_order <- c(
+  "GLaD_0.5_unweighted",
+  "GLaD_0.5_weighted",
+  "GLaD_1_unweighted",
+  "GLaD_1_weighted",
+  "unifrac_unweighted",
+  "unifrac_weighted_phyloseq",
+  "GUniFrac",
+  "aitchison",
+  "bray",
+  "euclidean",
+  "jaccard"
+)
+
+## ---------------------------------------------------------
+## Publication-ready method labels
+## ---------------------------------------------------------
+method_labels <- c(
+  "GLaD_0.5_unweighted"       = "Unweighted GLaD\n(rho = 0.5)",
+  "GLaD_0.5_weighted"         = "Weighted GLaD\n(rho = 0.5)",
+  "GLaD_1_unweighted"         = "Unweighted GLaD\n(rho = 1)",
+  "GLaD_1_weighted"           = "Weighted GLaD\n(rho = 1)",
+  "unifrac_unweighted"        = "Unweighted\nUniFrac",
+  "unifrac_weighted_phyloseq" = "Weighted\nUniFrac",
+  "GUniFrac"                  = "GUniFrac",
+  "aitchison"                 = "Aitchison",
+  "bray"                      = "Bray-Curtis",
+  "euclidean"                 = "Euclidean",
+  "jaccard"                   = "Jaccard"
+)
+
+## ---------------------------------------------------------
+## Heatmap fill palette
+## User gave highest -> lowest:
+##   D93F49, E28187, EBBFC2, D5E1E3, AFC9CF, 8FB4BE
+##
+## ggplot needs low -> high, so reverse it here.
+## ---------------------------------------------------------
+heatmap_fill <- c(
+  "#8FB4BE",
+  "#AFC9CF",
+  "#D5E1E3",
+  "#EBBFC2",
+  "#E28187",
+  "#D93F49"
+)
+
+## -------------------- check input --------------------
+if (!exists("results")) {
+  stop("Object 'results' is not found in your environment.")
+}
+
+if (!is.data.frame(results)) {
+  stop("'results' must be a data.frame.")
+}
+
+bad_cols <- intersect(c("X", "...1", "row.names"), names(results))
+if (length(bad_cols) > 0) {
+  results <- results[, setdiff(names(results), bad_cols), drop = FALSE]
+}
+
+needed_cols <- c("k", "signal_cluster", "beta", "signal_mode")
+missing_cols <- setdiff(needed_cols, names(results))
+
+if (length(missing_cols) > 0) {
+  stop(
+    "Missing required columns:\n",
+    paste(missing_cols, collapse = ", ")
+  )
+}
+
+p_cols <- grep("^p_", names(results), value = TRUE)
+
+if (length(p_cols) == 0) {
+  stop("No p-value columns beginning with 'p_' were found in results.")
+}
+
+has_cluster_ordered <- "cluster_ordered" %in% names(results)
+
+## -------------------- output folder --------------------
+outdir <- file.path(getwd(), "weighted_power_output")
+dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+
+heatmap_outdir <- file.path(outdir, "power_heatmaps")
+dir.create(heatmap_outdir, recursive = TRUE, showWarnings = FALSE)
+
+cat("Output folder:\n", heatmap_outdir, "\n\n")
+
+## =========================================================
+## Step 1: reshape p-values to long format
+## =========================================================
+
+select_cols <- c("k", "signal_cluster", "signal_mode", "beta")
+
+if (has_cluster_ordered) {
+  select_cols <- c(select_cols, "cluster_ordered")
+}
+
+long_res <- results %>%
+  select(all_of(select_cols), all_of(p_cols)) %>%
+  pivot_longer(
+    cols = all_of(p_cols),
+    names_to = "method",
+    values_to = "pval"
+  ) %>%
+  mutate(
+    method = sub("^p_", "", method),
+    reject = as.integer(pval < alpha_level)
+  ) %>%
+  filter(
+    beta > 0,
+    method %in% method_order
+  )
+
+## =========================================================
+## Step 2: compute empirical power
+## =========================================================
+
+group_vars <- c("k", "signal_cluster", "signal_mode", "beta", "method")
+
+if (has_cluster_ordered) {
+  group_vars <- c(
+    "k", "signal_cluster", "cluster_ordered",
+    "signal_mode", "beta", "method"
+  )
+}
+
+power_heatmap <- long_res %>%
+  filter(!is.na(pval), !is.na(reject)) %>%
+  group_by(across(all_of(group_vars))) %>%
+  summarise(
+    power = mean(reject, na.rm = TRUE),
+    n_nonmissing = sum(!is.na(pval)),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    power = pmin(pmax(power, 0), 1)
+  )
+
+write.csv(
+  power_heatmap,
+  file = file.path(heatmap_outdir, "power_heatmap_data.csv"),
+  row.names = FALSE
+)
+
+cat("Saved heatmap data table:\n")
+cat(file.path(heatmap_outdir, "power_heatmap_data.csv"), "\n\n")
+
+## =========================================================
+## Step 3: make one heatmap for each (k, signal_mode)
+## =========================================================
+
+k_values <- sort(unique(power_heatmap$k))
+
+for (kk in k_values) {
+  
+  signal_modes_k <- sort(unique(power_heatmap$signal_mode[power_heatmap$k == kk]))
+  
+  for (smode in signal_modes_k) {
+    
+    cat("Making heatmap for k =", kk, "| signal_mode =", smode, "\n")
+    
+    dat_ks <- power_heatmap %>%
+      filter(k == kk, signal_mode == smode)
+    
+    ## -------------------- cluster ordering --------------------
+    if (has_cluster_ordered) {
+      cluster_key <- dat_ks %>%
+        distinct(signal_cluster, cluster_ordered) %>%
+        arrange(cluster_ordered, signal_cluster) %>%
+        mutate(cluster_label = paste0("C", cluster_ordered))
+    } else {
+      cluster_key <- dat_ks %>%
+        distinct(signal_cluster) %>%
+        arrange(signal_cluster) %>%
+        mutate(cluster_label = paste0("C", signal_cluster))
+    }
+    
+    dat_ks <- dat_ks %>%
+      left_join(cluster_key, by = "signal_cluster")
+    
+    cluster_levels <- cluster_key$cluster_label
+    
+    beta_values <- sort(unique(dat_ks$beta))
+    
+    dat_ks <- dat_ks %>%
+      mutate(
+        method = factor(method, levels = method_order),
+        method_label = factor(
+          method_labels[as.character(method)],
+          levels = method_labels[method_order]
+        ),
+        cluster_label = factor(cluster_label, levels = rev(cluster_levels)),
+        beta_label = factor(
+          paste0("beta = ", beta),
+          levels = paste0("beta = ", beta_values)
+        ),
+        power_label = sprintf("%.2f", power),
+        text_color = ifelse(power >= 0.62, "white", "black")
+      )
+    
+    ## -------------------- decide facet layout --------------------
+n_beta <- length(beta_values)
+n_cluster <- length(cluster_levels)
+n_method <- length(method_order)
+
+## Use up to 4 beta panels per row
+facet_ncol <- min(4, n_beta)
+
+## Increase figure width so x-axis method labels do not overlap
+## Each beta panel gets enough horizontal space for all methods
+single_panel_width <- max(8.5, 0.75 * n_method)
+
+plot_width <- min(
+  48,
+  max(18, facet_ncol * single_panel_width)
+)
+
+plot_height <- max(
+  6,
+  min(
+    24,
+    ceiling(n_beta / facet_ncol) * (0.45 * n_cluster + 1.6)
+  )
+)
+    
+    ## -------------------- plot --------------------
+    p_heat <- ggplot(
+      dat_ks,
+      aes(x = method_label, y = cluster_label, fill = power)
+    ) +
+      geom_tile(color = "white", linewidth = 0.65) +
+      geom_text(
+        aes(label = power_label, color = text_color),
+        size = 3.0,
+        family = "serif",
+        show.legend = FALSE
+      ) +
+      scale_color_identity() +
+      scale_fill_gradientn(
+        colours = heatmap_fill,
+        limits = c(0, 1),
+        breaks = seq(0, 1, by = 0.2),
+        labels = sprintf("%.1f", seq(0, 1, by = 0.2)),
+        name = "Power"
+      ) +
+      facet_wrap(
+        ~ beta_label,
+        ncol = facet_ncol
+      ) +
+      labs(
+        x = NULL,
+        y = "Signal cluster"
+      ) +
+      theme_bw(base_size = 12, base_family = "serif") +
+      theme(
+        panel.grid = element_blank(),
+        panel.border = element_rect(color = "black", fill = NA, linewidth = 0.6),
+        panel.background = element_rect(fill = "white", color = NA),
+        
+        strip.background = element_rect(fill = "grey95", color = "black", linewidth = 0.5),
+        strip.text = element_text(face = "bold", size = 11, color = "black"),
+        
+        axis.text.x = element_text(
+  angle = 45,
+  hjust = 1,
+  vjust = 1,
+  size = 8.5,
+  color = "black",
+  lineheight = 0.85
+),
+        axis.text.y = element_text(size = 10, color = "black"),
+        axis.title = element_text(face = "bold", size = 12),
+        
+        legend.title = element_text(face = "bold", size = 11),
+        legend.text = element_text(size = 10),
+        legend.key.height = unit(0.7, "cm"),
+        
+        panel.spacing = unit(0.7, "lines"),
+        plot.margin = margin(8, 10, 8, 8)
+      )
+    
+    print(p_heat)
+    
+    ## -------------------- save plot --------------------
+    safe_smode <- gsub("[^A-Za-z0-9_\\-]+", "_", smode)
+    
+    png_file <- file.path(
+      heatmap_outdir,
+      paste0("power_heatmap_k", kk, "_", safe_smode, ".png")
+    )
+    
+    pdf_file <- file.path(
+      heatmap_outdir,
+      paste0("power_heatmap_k", kk, "_", safe_smode, ".pdf")
+    )
+    
+    ggsave(
+      filename = png_file,
+      plot = p_heat,
+      width = plot_width,
+      height = plot_height,
+      dpi = 300
+    )
+    
+    ggsave(
+      filename = pdf_file,
+      plot = p_heat,
+      width = plot_width,
+      height = plot_height
+    )
+    
+    cat("Saved:\n")
+    cat(png_file, "\n")
+    cat(pdf_file, "\n\n")
+  }
+}
+
+cat("All published-ready power heatmaps have been saved to:\n")
+cat(heatmap_outdir, "\n")
+```
+
+
+# ........
+
+```{r}
+## =========================================================
+## Updated summary code for loaded data frame: results
+##
+## What this code does:
+## 1) Creates ONE combined summary table:
+##    - cluster-level info
+##    - power (beta > 0)
+##    - type I error (beta = 0)
+##    - all methods in wide format
+##
+## 2) Saves summary table(s) and figures into a newly created folder
+##    under the current working directory
+##
+## 3) Still prints the main summary tables in R
+## =========================================================
+
+options(stringsAsFactors = FALSE, width = 1000)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+})
+
+alpha_level <- 0.05
+
+## -------------------- check input --------------------
+if (!exists("results")) {
+  stop("Object 'results' is not found in your environment.")
+}
+
+if (!is.data.frame(results)) {
+  stop("'results' must be a data.frame.")
+}
+
+## remove accidental extra columns
+bad_cols <- intersect(c("X", "...1", "row.names"), names(results))
+if (length(bad_cols) > 0) {
+  results <- results[, setdiff(names(results), bad_cols), drop = FALSE]
+}
+
+## -------------------- create output folder under working directory --------------------
+outdir <- file.path(getwd(), "cluster_summary_output")
+dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+
+cat("Output folder created / used:\n", outdir, "\n\n")
+
+## -------------------- required columns --------------------
+required_cluster_cols <- c(
+  "k", "signal_cluster", "cluster_ordered", "cluster_n_otus_template",
+  "cluster_avg_silhouette", "cluster_mean_relative_abundance", "cluster_mean_prevalence",
+  "within_cop_n_pair", "within_cop_mean", "within_cop_sd",
+  "within_cop_min", "within_cop_q1", "within_cop_median", "within_cop_q3", "within_cop_max",
+  "within_cop_iqr", "within_cop_lower_whisker", "within_cop_upper_whisker", "within_cop_n_outlier"
+)
+
+missing_cluster_cols <- setdiff(required_cluster_cols, names(results))
+if (length(missing_cluster_cols) > 0) {
+  stop(
+    "Missing cluster-summary columns in results:\n",
+    paste(missing_cluster_cols, collapse = ", ")
+  )
+}
+
+p_cols <- grep("^p_", names(results), value = TRUE)
+if (length(p_cols) == 0) {
+  stop("No p-value columns found in results.")
+}
+
+## -------------------- cluster summary --------------------
+cluster_summary <- results %>%
+  select(all_of(required_cluster_cols)) %>%
+  distinct(k, signal_cluster, .keep_all = TRUE) %>%
+  arrange(k, cluster_ordered, signal_cluster) %>%
+  transmute(
+    k = k,
+    signal_cluster = signal_cluster,
+    cluster_ordered = cluster_ordered,
+    n_otu = cluster_n_otus_template,
+    avg_silhouette = cluster_avg_silhouette,
+    mean_relative_abundance = cluster_mean_relative_abundance,
+    mean_prevalence = cluster_mean_prevalence,
+    within_cop_n_pair = within_cop_n_pair,
+    within_cop_mean = within_cop_mean,
+    within_cop_sd = within_cop_sd,
+    within_cop_min = within_cop_min,
+    within_cop_q1 = within_cop_q1,
+    within_cop_median = within_cop_median,
+    within_cop_q3 = within_cop_q3,
+    within_cop_max = within_cop_max,
+    within_cop_iqr = within_cop_iqr,
+    lower_whisker = within_cop_lower_whisker,
+    upper_whisker = within_cop_upper_whisker,
+    n_outlier = within_cop_n_outlier
+  )
+
+## print cluster summary nicely
+cat("============================================================\n")
+cat("CLUSTER SUMMARY\n")
+cat("============================================================\n\n")
+
+for (kk in sort(unique(cluster_summary$k))) {
+  cat("\n##############################\n")
+  cat("k =", kk, "\n")
+  cat("##############################\n")
+  
+  tmp <- cluster_summary %>%
+    filter(k == kk) %>%
+    mutate(
+      avg_silhouette = round(avg_silhouette, 4),
+      mean_relative_abundance = signif(mean_relative_abundance, 4),
+      mean_prevalence = round(mean_prevalence, 4),
+      within_cop_mean = round(within_cop_mean, 4),
+      within_cop_sd = round(within_cop_sd, 4),
+      within_cop_min = round(within_cop_min, 4),
+      within_cop_q1 = round(within_cop_q1, 4),
+      within_cop_median = round(within_cop_median, 4),
+      within_cop_q3 = round(within_cop_q3, 4),
+      within_cop_max = round(within_cop_max, 4),
+      within_cop_iqr = round(within_cop_iqr, 4),
+      lower_whisker = round(lower_whisker, 4),
+      upper_whisker = round(upper_whisker, 4)
+    ) %>%
+    as.data.frame()
+  
+  print(tmp, row.names = FALSE)
+}
+
+## -------------------- reshape p-values --------------------
+long_res <- results %>%
+  select(k, signal_cluster, cluster_ordered, signal_mode, beta, all_of(p_cols)) %>%
+  pivot_longer(
+    cols = all_of(p_cols),
+    names_to = "method",
+    values_to = "pval"
+  ) %>%
+  mutate(method = sub("^p_", "", method))
+
+## -------------------- power table (beta > 0) --------------------
+power_long <- long_res %>%
+  filter(beta > 0) %>%
+  group_by(k, signal_cluster, cluster_ordered, signal_mode, beta, method) %>%
+  summarise(
+    value = mean(pval < alpha_level, na.rm = TRUE),
+    n_nonmissing = sum(!is.na(pval)),
+    .groups = "drop"
+  ) %>%
+  mutate(summary_type = "power")
+
+power_wide <- power_long %>%
+  select(k, signal_cluster, cluster_ordered, signal_mode, beta, summary_type, method, value) %>%
+  pivot_wider(names_from = method, values_from = value)
+
+## -------------------- type I error table (beta = 0) --------------------
+type1_long <- long_res %>%
+  filter(beta == 0) %>%
+  group_by(k, signal_cluster, cluster_ordered, signal_mode, beta, method) %>%
+  summarise(
+    value = mean(pval < alpha_level, na.rm = TRUE),
+    n_nonmissing = sum(!is.na(pval)),
+    .groups = "drop"
+  ) %>%
+  mutate(summary_type = "type1_error")
+
+type1_wide <- type1_long %>%
+  select(k, signal_cluster, cluster_ordered, signal_mode, beta, summary_type, method, value) %>%
+  pivot_wider(names_from = method, values_from = value)
+
+## -------------------- ONE combined summary table --------------------
+combined_summary_table <- bind_rows(power_wide, type1_wide) %>%
+  left_join(cluster_summary, by = c("k", "signal_cluster", "cluster_ordered")) %>%
+  arrange(k, cluster_ordered, signal_mode, beta, summary_type)
+
+## nicer column order
+method_cols <- setdiff(
+  names(combined_summary_table),
+  c(
+    "k", "signal_cluster", "cluster_ordered", "signal_mode", "beta", "summary_type",
+    "n_otu", "avg_silhouette", "mean_relative_abundance", "mean_prevalence",
+    "within_cop_n_pair", "within_cop_mean", "within_cop_sd", "within_cop_min",
+    "within_cop_q1", "within_cop_median", "within_cop_q3", "within_cop_max",
+    "within_cop_iqr", "lower_whisker", "upper_whisker", "n_outlier"
+  )
+)
+
+combined_summary_table <- combined_summary_table %>%
+  select(
+    k, signal_cluster, cluster_ordered, signal_mode, beta, summary_type,
+    n_otu, avg_silhouette, mean_relative_abundance, mean_prevalence,
+    within_cop_n_pair, within_cop_mean, within_cop_sd, within_cop_min,
+    within_cop_q1, within_cop_median, within_cop_q3, within_cop_max,
+    within_cop_iqr, lower_whisker, upper_whisker, n_outlier,
+    all_of(method_cols)
+  )
+
+## -------------------- save tables --------------------
+write.csv(cluster_summary,
+          file = file.path(outdir, "cluster_summary_table.csv"),
+          row.names = FALSE)
+
+write.csv(power_wide,
+          file = file.path(outdir, "power_table_only.csv"),
+          row.names = FALSE)
+
+write.csv(type1_wide,
+          file = file.path(outdir, "type1_error_table_only.csv"),
+          row.names = FALSE)
+
+write.csv(combined_summary_table,
+          file = file.path(outdir, "combined_summary_table.csv"),
+          row.names = FALSE)
+
+cat("\nSaved tables:\n")
+cat(file.path(outdir, "cluster_summary_table.csv"), "\n")
+cat(file.path(outdir, "power_table_only.csv"), "\n")
+cat(file.path(outdir, "type1_error_table_only.csv"), "\n")
+cat(file.path(outdir, "combined_summary_table.csv"), "\n\n")
+
+## print part of combined table
+cat("============================================================\n")
+cat("COMBINED SUMMARY TABLE (first 20 rows)\n")
+cat("============================================================\n\n")
+print(as.data.frame(head(combined_summary_table, 20)), row.names = FALSE)
+
+## -------------------- save within-cluster boxplot --------------------
+boxplot_df <- cluster_summary %>%
+  arrange(k, cluster_ordered, signal_cluster) %>%
+  mutate(
+    cluster_label = paste0("C", signal_cluster, "\n(ord ", cluster_ordered, ")")
+  )
+
+p_box <- ggplot(
+  boxplot_df,
+  aes(
+    x = factor(cluster_label, levels = unique(cluster_label)),
+    ymin = lower_whisker,
+    lower = within_cop_q1,
+    middle = within_cop_median,
+    upper = within_cop_q3,
+    ymax = upper_whisker
+  )
+) +
+  geom_boxplot(stat = "identity", width = 0.65) +
+  facet_wrap(~ k, scales = "free_x") +
+  labs(
+    title = "Within-cluster cophenetic distance boxplots",
+    x = "Cluster",
+    y = "Within-cluster cop distance"
+  ) +
+  theme_bw() +
+  theme(
+    strip.text = element_text(face = "bold"),
+    axis.text.x = element_text(size = 8)
+  )
+
+ggsave(
+  filename = file.path(outdir, "within_cluster_cop_boxplots.png"),
+  plot = p_box,
+  width = 14, height = 8, dpi = 300
+)
+
+ggsave(
+  filename = file.path(outdir, "within_cluster_cop_boxplots.pdf"),
+  plot = p_box,
+  width = 14, height = 8
+)
+
+print(p_box)
+
+## -------------------- save power heatmaps --------------------
+if (nrow(power_long) > 0) {
+  for (kk in sort(unique(power_long$k))) {
+    plot_df <- power_long %>%
+      filter(k == kk) %>%
+      arrange(cluster_ordered, signal_cluster) %>%
+      mutate(
+        signal_cluster_f = factor(signal_cluster, levels = unique(signal_cluster))
+      )
+    
+    p_power <- ggplot(plot_df, aes(x = method, y = signal_cluster_f, fill = value)) +
+      geom_tile(color = "white") +
+      facet_grid(signal_mode ~ beta) +
+      labs(
+        title = paste("Power heatmap | k =", kk),
+        x = "Method",
+        y = "Signal cluster",
+        fill = "Power"
+      ) +
+      theme_bw() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(face = "bold")
+      )
+    
+    ggsave(
+      filename = file.path(outdir, paste0("power_heatmap_k", kk, ".png")),
+      plot = p_power,
+      width = 16, height = 8, dpi = 300
+    )
+    
+    ggsave(
+      filename = file.path(outdir, paste0("power_heatmap_k", kk, ".pdf")),
+      plot = p_power,
+      width = 16, height = 8
+    )
+    
+    print(p_power)
+  }
+}
+
+## -------------------- save type I error heatmaps --------------------
+if (nrow(type1_long) > 0) {
+  for (kk in sort(unique(type1_long$k))) {
+    plot_df <- type1_long %>%
+      filter(k == kk) %>%
+      arrange(cluster_ordered, signal_cluster) %>%
+      mutate(
+        signal_cluster_f = factor(signal_cluster, levels = unique(signal_cluster))
+      )
+    
+    p_type1 <- ggplot(plot_df, aes(x = method, y = signal_cluster_f, fill = value)) +
+      geom_tile(color = "white") +
+      facet_wrap(~ signal_mode) +
+      labs(
+        title = paste("Type I error heatmap | k =", kk, "| beta = 0"),
+        x = "Method",
+        y = "Signal cluster",
+        fill = "Type I error"
+      ) +
+      theme_bw() +
+      theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(face = "bold")
+      )
+    
+    ggsave(
+      filename = file.path(outdir, paste0("type1_error_heatmap_k", kk, ".png")),
+      plot = p_type1,
+      width = 12, height = 6, dpi = 300
+    )
+    
+    ggsave(
+      filename = file.path(outdir, paste0("type1_error_heatmap_k", kk, ".pdf")),
+      plot = p_type1,
+      width = 12, height = 6
+    )
+    
+    print(p_type1)
+  }
+}
+
+cat("\nAll summary tables and figures have been saved to:\n", outdir, "\n")
+```
+
+```{r}
+## =========================================================
+## Analyze which method is best under each situation
+## Assumes the combined data frame is already loaded as: results
+##
+## "Situation" = (k, signal_mode, beta)
+##
+## This code prints:
+## 1) type I error summary by method
+## 2) power summary by method and situation
+## 3) a combined ranking table
+## 4) winner tables:
+##    - best by raw power
+##    - best among methods controlling type I error
+##    - best by a balanced score
+##
+## No files are saved
+## =========================================================
+
+options(stringsAsFactors = FALSE, width = 1000)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+})
+
+alpha_level <- 0.05
+
+## exact type I control threshold used for "controlled" winner
+type1_tol_mean <- 0.00   # change to 0.01 if you want a looser rule
+type1_tol_max  <- 0.00   # change to 0.01 if you want a looser rule
+
+## -------------------- checks --------------------
+if (!exists("results")) stop("Object 'results' is not found.")
+if (!is.data.frame(results)) stop("'results' must be a data.frame.")
+
+bad_cols <- intersect(c("X", "...1", "row.names"), names(results))
+if (length(bad_cols) > 0) {
+  results <- results[, setdiff(names(results), bad_cols), drop = FALSE]
+}
+
+needed_cols <- c("k", "signal_cluster", "cluster_ordered", "signal_mode", "beta")
+miss_needed <- setdiff(needed_cols, names(results))
+if (length(miss_needed) > 0) {
+  stop("Missing required columns: ", paste(miss_needed, collapse = ", "))
+}
+
+p_cols <- grep("^p_", names(results), value = TRUE)
+if (length(p_cols) == 0) stop("No p-value columns found in results.")
+
+## -------------------- reshape p-values --------------------
+long_res <- results %>%
+  select(k, signal_cluster, cluster_ordered, signal_mode, beta, all_of(p_cols)) %>%
+  pivot_longer(
+    cols = all_of(p_cols),
+    names_to = "method",
+    values_to = "pval"
+  ) %>%
+  mutate(method = sub("^p_", "", method))
+
+## -------------------- per-cluster power/type I --------------------
+## beta > 0 => power
+power_cluster <- long_res %>%
+  filter(beta > 0) %>%
+  group_by(k, signal_mode, beta, signal_cluster, cluster_ordered, method) %>%
+  summarise(
+    power = mean(pval < alpha_level, na.rm = TRUE),
+    n_nonmissing = sum(!is.na(pval)),
+    .groups = "drop"
+  )
+
+## beta = 0 => type I error
+type1_cluster <- long_res %>%
+  filter(beta == 0) %>%
+  group_by(k, signal_mode, signal_cluster, cluster_ordered, method) %>%
+  summarise(
+    type1_error = mean(pval < alpha_level, na.rm = TRUE),
+    n_nonmissing = sum(!is.na(pval)),
+    .groups = "drop"
+  )
+
+## -------------------- method-level summaries --------------------
+## summarize power across signal clusters, keeping beta separate
+power_method_summary <- power_cluster %>%
+  group_by(k, signal_mode, beta, method) %>%
+  summarise(
+    n_clusters = n_distinct(signal_cluster),
+    mean_power = mean(power, na.rm = TRUE),
+    median_power = median(power, na.rm = TRUE),
+    min_power = min(power, na.rm = TRUE),
+    max_power = max(power, na.rm = TRUE),
+    sd_power = sd(power, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+## summarize type I error across clusters
+type1_method_summary <- type1_cluster %>%
+  group_by(k, signal_mode, method) %>%
+  summarise(
+    n_clusters = n_distinct(signal_cluster),
+    mean_type1 = mean(type1_error, na.rm = TRUE),
+    median_type1 = median(type1_error, na.rm = TRUE),
+    min_type1 = min(type1_error, na.rm = TRUE),
+    max_type1 = max(type1_error, na.rm = TRUE),
+    sd_type1 = sd(type1_error, na.rm = TRUE),
+    prop_clusters_over_alpha = mean(type1_error > alpha_level, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+## -------------------- combine power + type I --------------------
+analysis_table <- power_method_summary %>%
+  left_join(type1_method_summary, by = c("k", "signal_mode", "method")) %>%
+  mutate(
+    controls_type1_mean = mean_type1 <= alpha_level + type1_tol_mean,
+    controls_type1_max  = max_type1  <= alpha_level + type1_tol_max,
+    controls_type1_both = controls_type1_mean & controls_type1_max,
+    
+    ## raw deviation from nominal alpha
+    abs_mean_type1_dev = abs(mean_type1 - alpha_level),
+    abs_max_type1_dev  = abs(max_type1 - alpha_level),
+    
+    ## balanced score: higher is better, penalize type I deviation
+    ## change penalty if you want stronger/weaker emphasis on type I control
+    balanced_score = mean_power - abs(mean_type1 - alpha_level),
+    
+    ## strict controlled score: only methods passing control are eligible
+    controlled_power_score = ifelse(controls_type1_both, mean_power, NA_real_)
+  ) %>%
+  arrange(k, signal_mode, beta, desc(controls_type1_both), desc(mean_power), abs_mean_type1_dev)
+
+## -------------------- helper: collapse ties --------------------
+collapse_top <- function(x, score) {
+  if (length(x) == 0) return(NA_character_)
+  top <- max(score, na.rm = TRUE)
+  paste(x[score == top], collapse = "; ")
+}
+
+## -------------------- winners by scenario --------------------
+best_power_table <- analysis_table %>%
+  group_by(k, signal_mode, beta) %>%
+  summarise(
+    best_raw_power = collapse_top(method, mean_power),
+    best_raw_power_value = max(mean_power, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+best_balanced_table <- analysis_table %>%
+  group_by(k, signal_mode, beta) %>%
+  summarise(
+    best_balanced = collapse_top(method, balanced_score),
+    best_balanced_value = max(balanced_score, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+best_controlled_table <- analysis_table %>%
+  group_by(k, signal_mode, beta) %>%
+  summarise(
+    best_controlled = {
+      tmp <- method[controls_type1_both]
+      scr <- mean_power[controls_type1_both]
+      if (length(tmp) == 0) NA_character_ else collapse_top(tmp, scr)
+    },
+    best_controlled_power = {
+      tmp <- mean_power[controls_type1_both]
+      if (length(tmp) == 0) NA_real_ else max(tmp, na.rm = TRUE)
+    },
+    n_controlled_methods = sum(controls_type1_both, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+winner_table <- best_power_table %>%
+  left_join(best_balanced_table, by = c("k", "signal_mode", "beta")) %>%
+  left_join(best_controlled_table, by = c("k", "signal_mode", "beta")) %>%
+  arrange(k, signal_mode, beta)
+
+## -------------------- method win counts --------------------
+## raw power wins
+raw_power_wins <- analysis_table %>%
+  group_by(k, signal_mode, beta) %>%
+  filter(mean_power == max(mean_power, na.rm = TRUE)) %>%
+  ungroup() %>%
+  count(method, name = "n_raw_power_wins") %>%
+  arrange(desc(n_raw_power_wins), method)
+
+## controlled wins
+controlled_wins <- analysis_table %>%
+  filter(controls_type1_both) %>%
+  group_by(k, signal_mode, beta) %>%
+  filter(mean_power == max(mean_power, na.rm = TRUE)) %>%
+  ungroup() %>%
+  count(method, name = "n_controlled_wins") %>%
+  arrange(desc(n_controlled_wins), method)
+
+## balanced wins
+balanced_wins <- analysis_table %>%
+  group_by(k, signal_mode, beta) %>%
+  filter(balanced_score == max(balanced_score, na.rm = TRUE)) %>%
+  ungroup() %>%
+  count(method, name = "n_balanced_wins") %>%
+  arrange(desc(n_balanced_wins), method)
+
+win_summary <- full_join(raw_power_wins, controlled_wins, by = "method") %>%
+  full_join(balanced_wins, by = "method") %>%
+  mutate(
+    n_raw_power_wins = ifelse(is.na(n_raw_power_wins), 0L, n_raw_power_wins),
+    n_controlled_wins = ifelse(is.na(n_controlled_wins), 0L, n_controlled_wins),
+    n_balanced_wins = ifelse(is.na(n_balanced_wins), 0L, n_balanced_wins)
+  ) %>%
+  arrange(desc(n_controlled_wins), desc(n_balanced_wins), desc(n_raw_power_wins), method)
+
+## -------------------- print tables --------------------
+cat("\n============================================================\n")
+cat("TYPE I ERROR SUMMARY BY METHOD\n")
+cat("mean_type1 / max_type1 are summarized across signal clusters within each (k, signal_mode)\n")
+cat("A method is called 'controlled' here if:\n")
+cat("  mean_type1 <= ", alpha_level + type1_tol_mean,
+    " and max_type1 <= ", alpha_level + type1_tol_max, "\n", sep = "")
+cat("============================================================\n\n")
+
+type1_print <- type1_method_summary %>%
+  mutate(
+    mean_type1 = round(mean_type1, 4),
+    median_type1 = round(median_type1, 4),
+    min_type1 = round(min_type1, 4),
+    max_type1 = round(max_type1, 4),
+    sd_type1 = round(sd_type1, 4),
+    prop_clusters_over_alpha = round(prop_clusters_over_alpha, 4)
+  ) %>%
+  arrange(k, signal_mode, mean_type1, method) %>%
+  as.data.frame()
+
+print(type1_print, row.names = FALSE)
+
+cat("\n\n============================================================\n")
+cat("POWER + TYPE I ERROR RANKING TABLE\n")
+cat("Situation = (k, signal_mode, beta)\n")
+cat("mean_power is summarized across signal clusters, keeping beta separate\n")
+cat("============================================================\n\n")
+
+analysis_print <- analysis_table %>%
+  mutate(
+    mean_power = round(mean_power, 4),
+    median_power = round(median_power, 4),
+    min_power = round(min_power, 4),
+    max_power = round(max_power, 4),
+    sd_power = round(sd_power, 4),
+    mean_type1 = round(mean_type1, 4),
+    median_type1 = round(median_type1, 4),
+    min_type1 = round(min_type1, 4),
+    max_type1 = round(max_type1, 4),
+    sd_type1 = round(sd_type1, 4),
+    abs_mean_type1_dev = round(abs_mean_type1_dev, 4),
+    balanced_score = round(balanced_score, 4)
+  ) %>%
+  arrange(k, signal_mode, beta, desc(controls_type1_both), desc(mean_power), abs_mean_type1_dev, method) %>%
+  as.data.frame()
+
+print(analysis_print, row.names = FALSE)
+
+cat("\n\n============================================================\n")
+cat("WINNER TABLE BY SITUATION\n")
+cat("best_raw_power   = highest mean power, ignoring type I control\n")
+cat("best_controlled  = highest mean power among methods controlling type I error\n")
+cat("best_balanced    = highest [mean_power - |mean_type1 - alpha|]\n")
+cat("============================================================\n\n")
+
+winner_print <- winner_table %>%
+  mutate(
+    best_raw_power_value = round(best_raw_power_value, 4),
+    best_balanced_value = round(best_balanced_value, 4),
+    best_controlled_power = round(best_controlled_power, 4)
+  ) %>%
+  as.data.frame()
+
+print(winner_print, row.names = FALSE)
+
+cat("\n\n============================================================\n")
+cat("HOW OFTEN EACH METHOD WINS\n")
+cat("============================================================\n\n")
+
+print(as.data.frame(win_summary), row.names = FALSE)
+
+## -------------------- optional: top 3 ranking per situation --------------------
+top3_by_situation <- analysis_table %>%
+  group_by(k, signal_mode, beta) %>%
+  arrange(desc(controls_type1_both), desc(mean_power), abs_mean_type1_dev, .by_group = TRUE) %>%
+  slice_head(n = 3) %>%
+  ungroup() %>%
+  mutate(
+    mean_power = round(mean_power, 4),
+    mean_type1 = round(mean_type1, 4),
+    max_type1 = round(max_type1, 4),
+    balanced_score = round(balanced_score, 4)
+  )
+
+cat("\n\n============================================================\n")
+cat("TOP 3 METHODS IN EACH SITUATION\n")
+cat("Sorted by: controlled first, then mean power, then closeness to nominal type I error\n")
+cat("============================================================\n\n")
+
+print(as.data.frame(top3_by_situation), row.names = FALSE)
+
+## -------------------- optional: overall method summary --------------------
+overall_summary <- analysis_table %>%
+  group_by(method) %>%
+  summarise(
+    avg_mean_power = mean(mean_power, na.rm = TRUE),
+    avg_mean_type1 = mean(mean_type1, na.rm = TRUE),
+    avg_max_type1 = mean(max_type1, na.rm = TRUE),
+    prop_situations_controlled = mean(controls_type1_both, na.rm = TRUE),
+    avg_balanced_score = mean(balanced_score, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(prop_situations_controlled), desc(avg_balanced_score), desc(avg_mean_power))
+
+cat("\n\n============================================================\n")
+cat("OVERALL METHOD SUMMARY ACROSS ALL SITUATIONS\n")
+cat("============================================================\n\n")
+
+overall_print <- overall_summary %>%
+  mutate(
+    avg_mean_power = round(avg_mean_power, 4),
+    avg_mean_type1 = round(avg_mean_type1, 4),
+    avg_max_type1 = round(avg_max_type1, 4),
+    prop_situations_controlled = round(prop_situations_controlled, 4),
+    avg_balanced_score = round(avg_balanced_score, 4)
+  ) %>%
+  as.data.frame()
+
+print(overall_print, row.names = FALSE)
+```
+
+```{r}
+## =========================================================
+## Model "when each method can win"
+## Assumes your combined data frame is already loaded as: results
+##
+## Goal:
+## Instead of only filtering winners, this code builds interpretable models
+## for "winning" and prints tables showing:
+##
+## 1) which method wins in each situation
+## 2) one-vs-rest logistic models for each method
+## 3) coefficient / odds-ratio tables
+## 4) model-predicted winning situations for each method
+## 5) a compact "what to say" summary table for each method
+##
+## No files are saved
+## =========================================================
+
+options(stringsAsFactors = FALSE, width = 1000)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(rpart)
+})
+
+alpha_level <- 0.05
+
+## type I error control rule
+## a method is considered "controlled" in a given (k, signal_mode) if
+## mean_type1 <= alpha_level and max_type1 <= alpha_level
+type1_tol_mean <- 0.00
+type1_tol_max  <- 0.00
+
+## -------------------- check input --------------------
+if (!exists("results")) stop("Object 'results' is not found.")
+if (!is.data.frame(results)) stop("'results' must be a data.frame.")
+
+bad_cols <- intersect(c("X", "...1", "row.names"), names(results))
+if (length(bad_cols) > 0) {
+  results <- results[, setdiff(names(results), bad_cols), drop = FALSE]
+}
+
+needed_cols <- c(
+  "k", "signal_cluster", "cluster_ordered", "signal_mode", "beta",
+  "cluster_n_otus_template", "cluster_avg_silhouette",
+  "cluster_mean_relative_abundance", "cluster_mean_prevalence",
+  "within_cop_mean"
+)
+miss_needed <- setdiff(needed_cols, names(results))
+if (length(miss_needed) > 0) {
+  stop("Missing required columns:\n", paste(miss_needed, collapse = ", "))
+}
+
+p_cols <- grep("^p_", names(results), value = TRUE)
+if (length(p_cols) == 0) stop("No p-value columns found in results.")
+
+## -------------------- long p-value table --------------------
+long_res <- results %>%
+  select(
+    k, signal_cluster, cluster_ordered, signal_mode, beta,
+    cluster_n_otus_template, cluster_avg_silhouette,
+    cluster_mean_relative_abundance, cluster_mean_prevalence,
+    within_cop_mean,
+    all_of(p_cols)
+  ) %>%
+  pivot_longer(
+    cols = all_of(p_cols),
+    names_to = "method",
+    values_to = "pval"
+  ) %>%
+  mutate(method = sub("^p_", "", method))
+
+## -------------------- power at each exact situation --------------------
+## exact situation = (k, signal_cluster, signal_mode, beta)
+power_cluster <- long_res %>%
+  filter(beta > 0) %>%
+  group_by(
+    k, signal_cluster, cluster_ordered, signal_mode, beta, method,
+    cluster_n_otus_template, cluster_avg_silhouette,
+    cluster_mean_relative_abundance, cluster_mean_prevalence,
+    within_cop_mean
+  ) %>%
+  summarise(
+    power = mean(pval < alpha_level, na.rm = TRUE),
+    n_nonmissing = sum(!is.na(pval)),
+    .groups = "drop"
+  )
+
+## -------------------- type I error by (k, signal_mode, method) --------------------
+type1_method <- long_res %>%
+  filter(beta == 0) %>%
+  group_by(k, signal_mode, method) %>%
+  summarise(
+    mean_type1 = mean(pval < alpha_level, na.rm = TRUE),
+    max_type1 = max(tapply(pval < alpha_level,
+                           INDEX = interaction(signal_cluster, drop = TRUE),
+                           FUN = mean,
+                           na.rm = TRUE), na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    controls_type1 = (mean_type1 <= alpha_level + type1_tol_mean) &
+                     (max_type1  <= alpha_level + type1_tol_max)
+  )
+
+## -------------------- join type I info back to power table --------------------
+model_df <- power_cluster %>%
+  left_join(type1_method, by = c("k", "signal_mode", "method")) %>%
+  mutate(
+    controls_type1 = ifelse(is.na(controls_type1), FALSE, controls_type1),
+    mean_type1 = ifelse(is.na(mean_type1), NA_real_, mean_type1),
+    max_type1 = ifelse(is.na(max_type1), NA_real_, max_type1)
+  )
+
+## -------------------- define winners --------------------
+## raw winner: highest power in each exact situation
+model_df <- model_df %>%
+  group_by(k, signal_cluster, signal_mode, beta) %>%
+  mutate(
+    raw_best_power = max(power, na.rm = TRUE),
+    win_raw = power == raw_best_power
+  ) %>%
+  ungroup()
+
+## controlled winner:
+## among methods that control type I error, choose highest power;
+## if no method controls, fall back to raw winner
+controlled_best <- model_df %>%
+  group_by(k, signal_cluster, signal_mode, beta) %>%
+  summarise(
+    any_controlled = any(controls_type1, na.rm = TRUE),
+    best_controlled_power = if (any(controls_type1, na.rm = TRUE)) {
+      max(power[controls_type1], na.rm = TRUE)
+    } else {
+      max(power, na.rm = TRUE)
+    },
+    .groups = "drop"
+  )
+
+model_df <- model_df %>%
+  left_join(controlled_best,
+            by = c("k", "signal_cluster", "signal_mode", "beta")) %>%
+  mutate(
+    win_controlled = ifelse(
+      any_controlled,
+      controls_type1 & (power == best_controlled_power),
+      power == best_controlled_power
+    )
+  )
+
+## -------------------- scenario winner tables --------------------
+scenario_raw_winner <- model_df %>%
+  filter(win_raw) %>%
+  group_by(k, signal_cluster, cluster_ordered, signal_mode, beta) %>%
+  summarise(
+    raw_winner = paste(sort(unique(method)), collapse = "; "),
+    raw_winner_power = max(power, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+scenario_controlled_winner <- model_df %>%
+  filter(win_controlled) %>%
+  group_by(k, signal_cluster, cluster_ordered, signal_mode, beta) %>%
+  summarise(
+    controlled_winner = paste(sort(unique(method)), collapse = "; "),
+    controlled_winner_power = max(power, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+scenario_winner_table <- scenario_raw_winner %>%
+  left_join(
+    scenario_controlled_winner,
+    by = c("k", "signal_cluster", "cluster_ordered", "signal_mode", "beta")
+  ) %>%
+  arrange(k, cluster_ordered, signal_mode, beta)
+
+cat("\n============================================================\n")
+cat("ACTUAL WINNER TABLE BY EXACT SITUATION\n")
+cat("Situation = (k, signal_cluster, signal_mode, beta)\n")
+cat("============================================================\n\n")
+print(as.data.frame(scenario_winner_table), row.names = FALSE)
+
+## -------------------- one-vs-rest logistic models --------------------
+## This models: in what situations does a given method win?
+##
+## outcome = win_controlled
+## predictors = k + signal_mode + beta + cluster features
+##
+## Note:
+## - k is treated as factor
+## - signal_mode is factor
+## - cluster features are numeric
+## - beta:signal_mode interaction is included
+##
+## If a model has no variation in win_controlled (all 0 or all 1),
+## it will be skipped.
+
+method_list <- sort(unique(model_df$method))
+model_list <- list()
+coef_table_list <- list()
+tree_rule_list <- list()
+
+for (m in method_list) {
+  dat_m <- model_df %>%
+    mutate(
+      win = as.integer(method == m & win_controlled),
+      k = factor(k),
+      signal_mode = factor(signal_mode)
+    )
+  
+  ## keep one row per method-situation
+  dat_m <- dat_m %>%
+    mutate(win = as.integer(method == m & win_controlled)) %>%
+    filter(method == m | TRUE)  # keep all rows, win says whether this method won
+  
+  ## create method-specific win indicator
+  dat_m$win <- as.integer(dat_m$method == m & dat_m$win_controlled)
+  
+  ## fit only if both classes exist
+  if (length(unique(dat_m$win)) < 2) {
+    message("Skipping method ", m, " because win outcome has no variation.")
+    next
+  }
+  
+  fit_glm <- glm(
+    win ~ k + signal_mode + beta +
+      cluster_n_otus_template +
+      cluster_avg_silhouette +
+      cluster_mean_relative_abundance +
+      cluster_mean_prevalence +
+      within_cop_mean +
+      beta:signal_mode,
+    data = dat_m,
+    family = binomial()
+  )
+  
+  model_list[[m]] <- fit_glm
+  
+  sm <- summary(fit_glm)$coefficients
+  coef_tab <- data.frame(
+    method = m,
+    term = rownames(sm),
+    estimate = sm[, "Estimate"],
+    std_error = sm[, "Std. Error"],
+    z_value = sm[, "z value"],
+    p_value = sm[, "Pr(>|z|)"],
+    odds_ratio = exp(sm[, "Estimate"]),
+    row.names = NULL,
+    stringsAsFactors = FALSE
+  )
+  coef_table_list[[m]] <- coef_tab
+  
+  ## also fit a small tree for readable "rules"
+  fit_tree <- rpart::rpart(
+    factor(win) ~ k + signal_mode + beta +
+      cluster_n_otus_template +
+      cluster_avg_silhouette +
+      cluster_mean_relative_abundance +
+      cluster_mean_prevalence +
+      within_cop_mean,
+    data = dat_m,
+    method = "class",
+    control = rpart.control(cp = 0.01, minsplit = 20, maxdepth = 3)
+  )
+  
+  tree_rule_list[[m]] <- capture.output(print(fit_tree))
+}
+
+coef_table <- bind_rows(coef_table_list)
+
+cat("\n\n============================================================\n")
+cat("LOGISTIC MODEL COEFFICIENT TABLES\n")
+cat("Interpretation:\n")
+cat("- positive estimate / OR > 1 => that condition helps the method win\n")
+cat("- negative estimate / OR < 1 => that condition hurts the method win\n")
+cat("============================================================\n\n")
+
+coef_print <- coef_table %>%
+  mutate(
+    estimate = round(estimate, 4),
+    std_error = round(std_error, 4),
+    z_value = round(z_value, 4),
+    p_value = signif(p_value, 4),
+    odds_ratio = round(odds_ratio, 4)
+  ) %>%
+  arrange(method, p_value)
+
+print(as.data.frame(coef_print), row.names = FALSE)
+
+## -------------------- print tree rules --------------------
+cat("\n\n============================================================\n")
+cat("TREE RULES FOR EACH METHOD\n")
+cat("These are simple rule-based approximations of when a method wins.\n")
+cat("============================================================\n")
+
+for (m in names(tree_rule_list)) {
+  cat("\n##############################\n")
+  cat("METHOD:", m, "\n")
+  cat("##############################\n")
+  cat(paste(tree_rule_list[[m]], collapse = "\n"))
+  cat("\n")
+}
+
+## -------------------- model-predicted winner on observed situations --------------------
+## Use the observed situation rows (without method), and let each method model predict
+## the probability that the method wins in that situation.
+
+scenario_features <- model_df %>%
+  select(
+    k, signal_cluster, cluster_ordered, signal_mode, beta,
+    cluster_n_otus_template, cluster_avg_silhouette,
+    cluster_mean_relative_abundance, cluster_mean_prevalence,
+    within_cop_mean
+  ) %>%
+  distinct() %>%
+  arrange(k, cluster_ordered, signal_mode, beta)
+
+pred_list <- list()
+
+for (m in names(model_list)) {
+  fit_glm <- model_list[[m]]
+  
+  newdat <- scenario_features %>%
+    mutate(
+      k = factor(k, levels = levels(model.frame(fit_glm)$k)),
+      signal_mode = factor(signal_mode, levels = levels(model.frame(fit_glm)$signal_mode))
+    )
+  
+  pred_prob <- predict(fit_glm, newdata = newdat, type = "response")
+  
+  pred_list[[m]] <- scenario_features %>%
+    mutate(
+      method = m,
+      pred_win_prob = pred_prob
+    )
+}
+
+pred_long <- bind_rows(pred_list)
+
+pred_winner_table <- pred_long %>%
+  group_by(k, signal_cluster, cluster_ordered, signal_mode, beta) %>%
+  mutate(max_prob = max(pred_win_prob, na.rm = TRUE)) %>%
+  filter(pred_win_prob == max_prob) %>%
+  summarise(
+    model_predicted_winner = paste(sort(unique(method)), collapse = "; "),
+    max_pred_win_prob = max(pred_win_prob, na.rm = TRUE),
+    cluster_n_otus_template = first(cluster_n_otus_template),
+    cluster_avg_silhouette = first(cluster_avg_silhouette),
+    cluster_mean_relative_abundance = first(cluster_mean_relative_abundance),
+    cluster_mean_prevalence = first(cluster_mean_prevalence),
+    within_cop_mean = first(within_cop_mean),
+    .groups = "drop"
+  ) %>%
+  arrange(k, cluster_ordered, signal_mode, beta)
+
+cat("\n\n============================================================\n")
+cat("MODEL-PREDICTED WINNER TABLE\n")
+cat("This answers: according to the fitted models, which method should win in each situation?\n")
+cat("============================================================\n\n")
+
+pred_winner_print <- pred_winner_table %>%
+  mutate(
+    max_pred_win_prob = round(max_pred_win_prob, 4),
+    cluster_avg_silhouette = round(cluster_avg_silhouette, 4),
+    cluster_mean_relative_abundance = signif(cluster_mean_relative_abundance, 4),
+    cluster_mean_prevalence = round(cluster_mean_prevalence, 4),
+    within_cop_mean = round(within_cop_mean, 4)
+  )
+
+print(as.data.frame(pred_winner_print), row.names = FALSE)
+
+## -------------------- "what to say" summary for each method --------------------
+## Summarize the situations where each method is the model-predicted winner
+
+method_region_summary <- pred_winner_table %>%
+  separate_rows(model_predicted_winner, sep = "; ") %>%
+  group_by(model_predicted_winner) %>%
+  summarise(
+    n_situations_won = n(),
+    k_values = paste(sort(unique(k)), collapse = ", "),
+    signal_modes = paste(sort(unique(signal_mode)), collapse = ", "),
+    beta_min = min(beta, na.rm = TRUE),
+    beta_q1 = as.numeric(quantile(beta, 0.25, na.rm = TRUE)),
+    beta_median = median(beta, na.rm = TRUE),
+    beta_q3 = as.numeric(quantile(beta, 0.75, na.rm = TRUE)),
+    beta_max = max(beta, na.rm = TRUE),
+    avg_n_otu = mean(cluster_n_otus_template, na.rm = TRUE),
+    avg_silhouette = mean(cluster_avg_silhouette, na.rm = TRUE),
+    avg_mean_rel_abund = mean(cluster_mean_relative_abundance, na.rm = TRUE),
+    avg_mean_prevalence = mean(cluster_mean_prevalence, na.rm = TRUE),
+    avg_within_cop_mean = mean(within_cop_mean, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_situations_won), model_predicted_winner)
+
+cat("\n\n============================================================\n")
+cat("COMPACT 'WHAT TO SAY' SUMMARY FOR EACH METHOD\n")
+cat("Interpretation:\n")
+cat("- k_values: which k values this method tends to win under\n")
+cat("- signal_modes: which signal types this method tends to win under\n")
+cat("- beta range / quartiles: what effect-size range favors this method\n")
+cat("- avg cluster features: what kind of signal cluster favors this method\n")
+cat("============================================================\n\n")
+
+method_region_print <- method_region_summary %>%
+  mutate(
+    avg_n_otu = round(avg_n_otu, 2),
+    avg_silhouette = round(avg_silhouette, 4),
+    avg_mean_rel_abund = signif(avg_mean_rel_abund, 4),
+    avg_mean_prevalence = round(avg_mean_prevalence, 4),
+    avg_within_cop_mean = round(avg_within_cop_mean, 4),
+    beta_min = round(beta_min, 4),
+    beta_q1 = round(beta_q1, 4),
+    beta_median = round(beta_median, 4),
+    beta_q3 = round(beta_q3, 4),
+    beta_max = round(beta_max, 4)
+  )
+
+print(as.data.frame(method_region_print), row.names = FALSE)
+
+## -------------------- optional: top situations per method --------------------
+## Shows the observed situations where the model gives the highest probability of winning
+
+top_situations_per_method <- pred_long %>%
+  group_by(method) %>%
+  arrange(desc(pred_win_prob), .by_group = TRUE) %>%
+  slice_head(n = 10) %>%
+  ungroup() %>%
+  arrange(method, desc(pred_win_prob))
+
+cat("\n\n============================================================\n")
+cat("TOP 10 MOST FAVORABLE SITUATIONS FOR EACH METHOD (MODEL-BASED)\n")
+cat("============================================================\n\n")
+
+top_situations_print <- top_situations_per_method %>%
+  mutate(
+    pred_win_prob = round(pred_win_prob, 4),
+    cluster_avg_silhouette = round(cluster_avg_silhouette, 4),
+    cluster_mean_relative_abundance = signif(cluster_mean_relative_abundance, 4),
+    cluster_mean_prevalence = round(cluster_mean_prevalence, 4),
+    within_cop_mean = round(within_cop_mean, 4)
+  )
+
+print(as.data.frame(top_situations_print), row.names = FALSE)
+```
+
+# power
+```{r}
+## =========================================================
+## GLMM for WINNING
+## outcome: whether a method wins in that replicate-situation
+## =========================================================
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(lme4)
+})
+
+alpha_level <- 0.05
+
+## -------------------- long format --------------------
+dat_long <- results %>%
+  select(
+    rep_id, k, signal_cluster, signal_mode, beta,
+    cluster_n_otus_template,
+    cluster_avg_silhouette,
+    cluster_mean_relative_abundance,
+    cluster_mean_prevalence,
+    within_cop_mean,
+    all_of(grep("^p_", names(results), value = TRUE))
+  ) %>%
+  pivot_longer(
+    cols = starts_with("p_"),
+    names_to = "method",
+    values_to = "pval"
+  ) %>%
+  mutate(
+    method = sub("^p_", "", method),
+    reject = as.integer(pval < alpha_level),
+    k = factor(k),
+    signal_cluster = factor(signal_cluster),
+    signal_mode = factor(signal_mode)
+  ) %>%
+  filter(beta > 0)
+
+## -------------------- define winner within each replicate-situation --------------------
+## 这里先用最简单定义：reject 最大，也就是 reject=1 的算 winner；
+## 如果多个 method 都 reject=1，则都记为 winner
+## 如果一个都不显著，则 winner 为空（这一组删掉）
+dat_win <- dat_long %>%
+  group_by(rep_id, k, signal_cluster, signal_mode, beta) %>%
+  mutate(max_reject = max(reject, na.rm = TRUE)) %>%
+  ungroup() %>%
+  filter(max_reject > 0) %>%
+  mutate(win = as.integer(reject == max_reject))
+
+## -------------------- standardize cluster covariates --------------------
+scale2 <- function(x) as.numeric(scale(x))
+
+dat_win <- dat_win %>%
+  mutate(
+    z_beta = scale2(beta),
+    z_n_otu = scale2(cluster_n_otus_template),
+    z_silhouette = scale2(cluster_avg_silhouette),
+    z_mean_rel_abund = scale2(cluster_mean_relative_abundance),
+    z_mean_prev = scale2(cluster_mean_prevalence),
+    z_within_cop = scale2(within_cop_mean)
+  )
+
+methods_to_fit <- sort(unique(dat_win$method))
+
+win_fit_list <- list()
+win_coef_list <- list()
+
+for (m in methods_to_fit) {
+  cat("\n=============================\n")
+  cat("Fitting WIN model for:", m, "\n")
+  cat("=============================\n")
+  
+  dat_m <- dat_win %>%
+    mutate(win_m = as.integer(method == m & win == 1))
+  
+  if (length(unique(dat_m$win_m)) < 2) {
+    cat("Skip", m, ": win outcome has no variation.\n")
+    next
+  }
+  
+  fit_m <- glmer(
+    win_m ~ signal_mode * z_beta +
+      z_n_otu +
+      z_silhouette +
+      z_mean_rel_abund +
+      z_mean_prev +
+      z_within_cop +
+      (1 | k/signal_cluster),
+    data = dat_m,
+    family = binomial(),
+    control = glmerControl(
+      optimizer = "bobyqa",
+      optCtrl = list(maxfun = 2e5)
+    )
+  )
+  
+  win_fit_list[[m]] <- fit_m
+  
+  sm <- coef(summary(fit_m))
+  coef_tab <- data.frame(
+    method = m,
+    term = rownames(sm),
+    estimate = sm[, "Estimate"],
+    std_error = sm[, "Std. Error"],
+    z_value = sm[, "z value"],
+    p_value = sm[, "Pr(>|z|)"],
+    odds_ratio = exp(sm[, "Estimate"]),
+    row.names = NULL,
+    stringsAsFactors = FALSE
+  )
+  
+  win_coef_list[[m]] <- coef_tab
+  
+  cat("\nWIN model coefficients:\n")
+  print(coef_tab, row.names = FALSE)
+  
+  cat("\nTop cluster-feature coefficients by |estimate|:\n")
+  print(
+    coef_tab %>%
+      filter(term %in% c(
+        "z_n_otu",
+        "z_silhouette",
+        "z_mean_rel_abund",
+        "z_mean_prev",
+        "z_within_cop"
+      )) %>%
+      mutate(abs_estimate = abs(estimate)) %>%
+      arrange(desc(abs_estimate)),
+    row.names = FALSE
+  )
+}
+
+win_coef_all <- bind_rows(win_coef_list)
+
+cat("\n\n============================================================\n")
+cat("ALL WIN-MODEL COEFFICIENTS\n")
+cat("============================================================\n\n")
+print(win_coef_all, row.names = FALSE)
+```
+
+# Type 1
+
+```{r}
+## =========================================================
+## GLMM for TYPE I ERROR
+## outcome: whether a method falsely rejects under null
+## only use beta == 0
+## =========================================================
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(lme4)
+})
+
+alpha_level <- 0.05
+
+## -------------------- check --------------------
+if (!exists("results")) stop("Object 'results' not found.")
+if (!is.data.frame(results)) stop("'results' must be a data.frame.")
+
+bad_cols <- intersect(c("X", "...1", "row.names"), names(results))
+if (length(bad_cols) > 0) {
+  results <- results[, setdiff(names(results), bad_cols), drop = FALSE]
+}
+
+needed_cols <- c(
+  "rep_id", "k", "signal_cluster", "signal_mode", "beta",
+  "cluster_n_otus_template",
+  "cluster_avg_silhouette",
+  "cluster_mean_relative_abundance",
+  "cluster_mean_prevalence",
+  "within_cop_mean"
+)
+
+miss <- setdiff(needed_cols, names(results))
+if (length(miss) > 0) {
+  stop("Missing columns: ", paste(miss, collapse = ", "))
+}
+
+p_cols <- grep("^p_", names(results), value = TRUE)
+if (length(p_cols) == 0) stop("No p-value columns found.")
+
+## -------------------- long format, null only --------------------
+dat_null <- results %>%
+  select(
+    rep_id, k, signal_cluster, signal_mode, beta,
+    cluster_n_otus_template,
+    cluster_avg_silhouette,
+    cluster_mean_relative_abundance,
+    cluster_mean_prevalence,
+    within_cop_mean,
+    all_of(p_cols)
+  ) %>%
+  pivot_longer(
+    cols = starts_with("p_"),
+    names_to = "method",
+    values_to = "pval"
+  ) %>%
+  mutate(
+    method = sub("^p_", "", method),
+    fp = as.integer(pval < alpha_level),
+    k = factor(k),
+    signal_cluster = factor(signal_cluster),
+    signal_mode = factor(signal_mode)
+  ) %>%
+  filter(beta == 0)
+
+## -------------------- standardize cluster covariates --------------------
+scale2 <- function(x) as.numeric(scale(x))
+
+dat_null <- dat_null %>%
+  mutate(
+    z_n_otu = scale2(cluster_n_otus_template),
+    z_silhouette = scale2(cluster_avg_silhouette),
+    z_mean_rel_abund = scale2(cluster_mean_relative_abundance),
+    z_mean_prev = scale2(cluster_mean_prevalence),
+    z_within_cop = scale2(within_cop_mean)
+  )
+
+methods_to_fit <- sort(unique(dat_null$method))
+
+type1_fit_list <- list()
+type1_coef_list <- list()
+
+for (m in methods_to_fit) {
+  cat("\n=============================\n")
+  cat("Fitting TYPE I ERROR model for:", m, "\n")
+  cat("=============================\n")
+  
+  dat_m <- dat_null %>% filter(method == m)
+  
+  if (length(unique(dat_m$fp)) < 2) {
+    cat("Skip", m, ": fp outcome has no variation.\n")
+    next
+  }
+  
+  fit_m <- glmer(
+    fp ~ signal_mode +
+      z_n_otu +
+      z_silhouette +
+      z_mean_rel_abund +
+      z_mean_prev +
+      z_within_cop +
+      (1 | k/signal_cluster),
+    data = dat_m,
+    family = binomial(),
+    control = glmerControl(
+      optimizer = "bobyqa",
+      optCtrl = list(maxfun = 2e5)
+    )
+  )
+  
+  type1_fit_list[[m]] <- fit_m
+  
+  sm <- coef(summary(fit_m))
+  coef_tab <- data.frame(
+    method = m,
+    term = rownames(sm),
+    estimate = sm[, "Estimate"],
+    std_error = sm[, "Std. Error"],
+    z_value = sm[, "z value"],
+    p_value = sm[, "Pr(>|z|)"],
+    odds_ratio = exp(sm[, "Estimate"]),
+    row.names = NULL,
+    stringsAsFactors = FALSE
+  )
+  
+  type1_coef_list[[m]] <- coef_tab
+  
+  cat("\nTYPE I ERROR model coefficients:\n")
+  print(coef_tab, row.names = FALSE)
+  
+  cat("\nTop cluster-feature coefficients by |estimate|:\n")
+  print(
+    coef_tab %>%
+      filter(term %in% c(
+        "z_n_otu",
+        "z_silhouette",
+        "z_mean_rel_abund",
+        "z_mean_prev",
+        "z_within_cop"
+      )) %>%
+      mutate(
+        abs_estimate = abs(estimate),
+        direction = ifelse(estimate > 0, "increase FP", "decrease FP")
+      ) %>%
+      arrange(desc(abs_estimate)),
+    row.names = FALSE
+  )
+}
+
+type1_coef_all <- bind_rows(type1_coef_list)
+
+cat("\n\n============================================================\n")
+cat("ALL TYPE I ERROR MODEL COEFFICIENTS\n")
+cat("============================================================\n\n")
+print(type1_coef_all, row.names = FALSE)
+
+## -------------------- summarize which cluster features matter most --------------------
+type1_feature_rank <- type1_coef_all %>%
+  filter(term %in% c(
+    "z_n_otu",
+    "z_silhouette",
+    "z_mean_rel_abund",
+    "z_mean_prev",
+    "z_within_cop"
+  )) %>%
+  mutate(
+    abs_estimate = abs(estimate),
+    direction = ifelse(estimate > 0, "increase FP", "decrease FP")
+  ) %>%
+  arrange(method, desc(abs_estimate))
+
+cat("\n\n============================================================\n")
+cat("WHICH CLUSTER FEATURES ARE MOST ASSOCIATED WITH TYPE I ERROR?\n")
+cat("Because covariates are standardized, |estimate| is comparable.\n")
+cat("============================================================\n\n")
+print(type1_feature_rank, row.names = FALSE)
+
+## -------------------- summarize our methods only --------------------
+our_methods <- intersect(
+  c("GLaD_0.5_weighted", "GLaD_0.5_unweighted",
+    "GLaD_1_weighted", "GLaD_1_unweighted"),
+  unique(type1_feature_rank$method)
+)
+
+our_type1_summary <- type1_feature_rank %>%
+  filter(method %in% our_methods) %>%
+  group_by(method) %>%
+  slice_max(order_by = abs_estimate, n = 3, with_ties = FALSE) %>%
+  ungroup()
+
+cat("\n\n============================================================\n")
+cat("TOP 3 CLUSTER FEATURES FOR TYPE I ERROR OF OUR METHODS\n")
+cat("============================================================\n\n")
+print(our_type1_summary, row.names = FALSE)
+```
+
+# joint power
+
+```{r}
+## =========================================================
+## JOINT GLMM FOR POWER
+## Better model for comparing methods directly
+##
+## outcome: reject = I(p < 0.05)
+## data: beta > 0 only
+##
+## key idea:
+##   one joint model with method + method x covariate interactions
+## so we can compare methods directly
+## =========================================================
+
+options(stringsAsFactors = FALSE, width = 1000)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(lme4)
+})
+
+alpha_level <- 0.05
+
+## -------------------- checks --------------------
+if (!exists("results")) stop("Object 'results' not found.")
+if (!is.data.frame(results)) stop("'results' must be a data.frame.")
+
+bad_cols <- intersect(c("X", "...1", "row.names"), names(results))
+if (length(bad_cols) > 0) {
+  results <- results[, setdiff(names(results), bad_cols), drop = FALSE]
+}
+
+needed_cols <- c(
+  "rep_id", "k", "signal_cluster", "signal_mode", "beta",
+  "cluster_n_otus_template",
+  "cluster_avg_silhouette",
+  "cluster_mean_relative_abundance",
+  "cluster_mean_prevalence",
+  "within_cop_mean"
+)
+
+miss <- setdiff(needed_cols, names(results))
+if (length(miss) > 0) {
+  stop("Missing columns: ", paste(miss, collapse = ", "))
+}
+
+p_cols <- grep("^p_", names(results), value = TRUE)
+if (length(p_cols) == 0) stop("No p-value columns found.")
+
+## -------------------- long format --------------------
+dat_power <- results %>%
+  select(
+    rep_id, k, signal_cluster, signal_mode, beta,
+    cluster_n_otus_template,
+    cluster_avg_silhouette,
+    cluster_mean_relative_abundance,
+    cluster_mean_prevalence,
+    within_cop_mean,
+    all_of(p_cols)
+  ) %>%
+  pivot_longer(
+    cols = all_of(p_cols),
+    names_to = "method",
+    values_to = "pval"
+  ) %>%
+  mutate(
+    method = sub("^p_", "", method),
+    reject = as.integer(pval < alpha_level),
+    k = factor(k),
+    signal_cluster = factor(signal_cluster),
+    signal_mode = factor(signal_mode),
+    method = factor(method)
+  ) %>%
+  filter(beta > 0)
+
+## -------------------- choose method reference level --------------------
+## You can change this if you want a different baseline method
+preferred_order <- c(
+  "GLaD_0.5_unweighted",
+  "GLaD_0.5_weighted",
+  "GLaD_1_unweighted",
+  "GLaD_1_weighted",
+  "GUniFrac",
+  "unifrac_unweighted",
+  "unifrac_weighted_phyloseq",
+  "aitchison",
+  "bray",
+  "euclidean",
+  "jaccard"
+)
+
+method_levels <- unique(dat_power$method)
+preferred_order <- preferred_order[preferred_order %in% method_levels]
+other_methods <- setdiff(sort(method_levels), preferred_order)
+dat_power$method <- factor(dat_power$method, levels = c(preferred_order, other_methods))
+
+## -------------------- standardize continuous covariates --------------------
+scale2 <- function(x) as.numeric(scale(x))
+
+dat_power <- dat_power %>%
+  mutate(
+    z_beta = scale2(beta),
+    z_n_otu = scale2(cluster_n_otus_template),
+    z_silhouette = scale2(cluster_avg_silhouette),
+    z_mean_rel_abund = scale2(cluster_mean_relative_abundance),
+    z_mean_prev = scale2(cluster_mean_prevalence),
+    z_within_cop = scale2(within_cop_mean)
+  )
+
+## -------------------- fit joint GLMM --------------------
+## main effects:
+##   method + signal_mode + z_beta + cluster features
+##
+## interactions:
+##   method x cluster features
+##   method x z_beta
+##   signal_mode x z_beta
+##
+## This lets you compare methods directly.
+
+fit_power_joint <- glmer(
+  reject ~
+    method +
+    signal_mode +
+    z_beta +
+    z_n_otu +
+    z_silhouette +
+    z_mean_rel_abund +
+    z_mean_prev +
+    z_within_cop +
+    signal_mode:z_beta +
+    method:z_beta +
+    method:z_n_otu +
+    method:z_silhouette +
+    method:z_mean_rel_abund +
+    method:z_mean_prev +
+    method:z_within_cop +
+    (1 | k/signal_cluster),
+  data = dat_power,
+  family = binomial(),
+  control = glmerControl(
+    optimizer = "bobyqa",
+    optCtrl = list(maxfun = 3e5)
+  )
+)
+
+cat("\n============================================================\n")
+cat("JOINT POWER MODEL SUMMARY\n")
+cat("============================================================\n\n")
+print(summary(fit_power_joint))
+
+## -------------------- coefficient table --------------------
+sm_power <- coef(summary(fit_power_joint))
+
+power_coef_table <- data.frame(
+  term = rownames(sm_power),
+  estimate = sm_power[, "Estimate"],
+  std_error = sm_power[, "Std. Error"],
+  z_value = sm_power[, "z value"],
+  p_value = sm_power[, "Pr(>|z|)"],
+  odds_ratio = exp(sm_power[, "Estimate"]),
+  row.names = NULL,
+  stringsAsFactors = FALSE
+)
+
+cat("\n============================================================\n")
+cat("JOINT POWER MODEL COEFFICIENT TABLE\n")
+cat("============================================================\n\n")
+print(power_coef_table, row.names = FALSE)
+
+## -------------------- extract direct method-comparison interaction terms --------------------
+## these are the key terms if you want to compare methods directly
+feature_terms <- c(
+  "z_n_otu",
+  "z_silhouette",
+  "z_mean_rel_abund",
+  "z_mean_prev",
+  "z_within_cop"
+)
+
+interaction_pattern <- paste0("method.*:(", paste(feature_terms, collapse = "|"), ")$")
+
+power_method_feature_interactions <- power_coef_table %>%
+  filter(grepl(interaction_pattern, term)) %>%
+  mutate(abs_estimate = abs(estimate)) %>%
+  arrange(p_value, desc(abs_estimate))
+
+cat("\n============================================================\n")
+cat("JOINT POWER MODEL: METHOD x FEATURE INTERACTIONS\n")
+cat("These terms directly tell you whether a method differs from the reference method\n")
+cat("in its dependence on a given cluster feature.\n")
+cat("============================================================\n\n")
+print(power_method_feature_interactions, row.names = FALSE)
+
+## -------------------- simple per-method effective slopes --------------------
+## This reconstructs each method's slope for each cluster feature:
+##   slope(reference method) = main feature coefficient
+##   slope(other method) = main feature coefficient + interaction coefficient
+##
+## Very useful for making tables.
+
+all_methods <- levels(dat_power$method)
+ref_method <- all_methods[1]
+
+get_effective_slope_table <- function(coef_tab, methods, feature_terms, ref_method) {
+  out <- list()
+  
+  for (feat in feature_terms) {
+    main_est <- coef_tab$estimate[match(feat, coef_tab$term)]
+    if (length(main_est) == 0 || is.na(main_est)) main_est <- 0
+    
+    for (m in methods) {
+      if (m == ref_method) {
+        est <- main_est
+      } else {
+        int_term <- paste0("method", m, ":", feat)
+        int_est <- coef_tab$estimate[match(int_term, coef_tab$term)]
+        if (length(int_est) == 0 || is.na(int_est)) int_est <- 0
+        est <- main_est + int_est
+      }
+      
+      out[[length(out) + 1]] <- data.frame(
+        method = m,
+        feature = feat,
+        log_odds_slope = est,
+        odds_ratio = exp(est),
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+  
+  bind_rows(out)
+}
+
+power_effective_slopes <- get_effective_slope_table(
+  coef_tab = power_coef_table,
+  methods = all_methods,
+  feature_terms = feature_terms,
+  ref_method = ref_method
+) %>%
+  arrange(method, feature)
+
+cat("\n============================================================\n")
+cat("JOINT POWER MODEL: EFFECTIVE PER-METHOD FEATURE SLOPES\n")
+cat("These are the implied odds ratios for each method and each feature.\n")
+cat("============================================================\n\n")
+print(power_effective_slopes, row.names = FALSE)
+
+## -------------------- top features per method --------------------
+power_feature_rank <- power_effective_slopes %>%
+  mutate(
+    abs_log_odds_slope = abs(log_odds_slope),
+    direction = ifelse(log_odds_slope > 0, "increase power", "decrease power")
+  ) %>%
+  arrange(method, desc(abs_log_odds_slope))
+
+cat("\n============================================================\n")
+cat("JOINT POWER MODEL: FEATURE IMPORTANCE BY METHOD\n")
+cat("============================================================\n\n")
+print(power_feature_rank, row.names = FALSE)
+```
+
+```{r}
+## =========================================================
+## CONTRAST TESTS FOR JOINT POWER MODEL
+## Compare method-specific slopes for the 4 cluster features
+## =========================================================
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(emmeans)
+})
+
+## 这 4 个就是你表里的变量
+feature_vars <- c(
+  "z_within_cop",
+  "z_mean_rel_abund",
+  "z_mean_prev",
+  "z_n_otu"
+)
+
+## 一个函数：对某个 covariate 做 method slope comparison
+get_method_slope_contrasts <- function(fit, var_name, adjust_method = "tukey") {
+  
+  ## emtrends 提取每个 method 对该变量的 slope
+  tr <- emtrends(
+    fit,
+    specs = "method",
+    var = var_name
+  )
+  
+  ## method 两两比较
+  pw <- pairs(tr, adjust = adjust_method)
+  
+  ## 输出为 data.frame
+  tr_df <- as.data.frame(summary(tr))
+  pw_df <- as.data.frame(summary(pw))
+  
+  tr_df$feature <- var_name
+  pw_df$feature <- var_name
+  
+  list(
+    trends = tr_df,
+    contrasts = pw_df
+  )
+}
+
+power_contrast_results <- lapply(feature_vars, function(v) {
+  get_method_slope_contrasts(fit_power_joint, v, adjust_method = "tukey")
+})
+names(power_contrast_results) <- feature_vars
+
+## -------------------- print estimated slopes --------------------
+cat("\n============================================================\n")
+cat("JOINT POWER MODEL: ESTIMATED METHOD-SPECIFIC SLOPES\n")
+cat("============================================================\n\n")
+
+power_slopes_all <- bind_rows(lapply(power_contrast_results, `[[`, "trends")) %>%
+  arrange(feature, method)
+
+print(power_slopes_all, row.names = FALSE)
+
+## -------------------- print pairwise slope contrasts --------------------
+cat("\n============================================================\n")
+cat("JOINT POWER MODEL: PAIRWISE CONTRAST TESTS OF METHOD SLOPES\n")
+cat("Null: two methods have the same slope for a given feature\n")
+cat("============================================================\n\n")
+
+power_pairwise_all <- bind_rows(lapply(power_contrast_results, `[[`, "contrasts")) %>%
+  arrange(feature, contrast)
+
+print(power_pairwise_all, row.names = FALSE)
+
+## -------------------- if you only want significant contrasts --------------------
+cat("\n============================================================\n")
+cat("JOINT POWER MODEL: SIGNIFICANT METHOD CONTRASTS (p < 0.05)\n")
+cat("============================================================\n\n")
+
+power_pairwise_sig <- power_pairwise_all %>%
+  filter(p.value < 0.05) %>%
+  arrange(feature, p.value)
+
+print(power_pairwise_sig, row.names = FALSE)
+```
+
+
+
+# joint type1
+
+```{r}
+## =========================================================
+## JOINT GLMM FOR TYPE I ERROR
+## Better model for comparing methods directly
+##
+## outcome: fp = I(p < 0.05)
+## data: beta == 0 only
+##
+## key idea:
+##   one joint model with method + method x covariate interactions
+## so we can compare methods directly
+## =========================================================
+
+options(stringsAsFactors = FALSE, width = 1000)
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(lme4)
+})
+
+alpha_level <- 0.05
+
+## -------------------- checks --------------------
+if (!exists("results")) stop("Object 'results' not found.")
+if (!is.data.frame(results)) stop("'results' must be a data.frame.")
+
+bad_cols <- intersect(c("X", "...1", "row.names"), names(results))
+if (length(bad_cols) > 0) {
+  results <- results[, setdiff(names(results), bad_cols), drop = FALSE]
+}
+
+needed_cols <- c(
+  "rep_id", "k", "signal_cluster", "signal_mode", "beta",
+  "cluster_n_otus_template",
+  "cluster_avg_silhouette",
+  "cluster_mean_relative_abundance",
+  "cluster_mean_prevalence",
+  "within_cop_mean"
+)
+
+miss <- setdiff(needed_cols, names(results))
+if (length(miss) > 0) {
+  stop("Missing columns: ", paste(miss, collapse = ", "))
+}
+
+p_cols <- grep("^p_", names(results), value = TRUE)
+if (length(p_cols) == 0) stop("No p-value columns found.")
+
+## -------------------- long format --------------------
+dat_type1 <- results %>%
+  select(
+    rep_id, k, signal_cluster, signal_mode, beta,
+    cluster_n_otus_template,
+    cluster_avg_silhouette,
+    cluster_mean_relative_abundance,
+    cluster_mean_prevalence,
+    within_cop_mean,
+    all_of(p_cols)
+  ) %>%
+  pivot_longer(
+    cols = all_of(p_cols),
+    names_to = "method",
+    values_to = "pval"
+  ) %>%
+  mutate(
+    method = sub("^p_", "", method),
+    fp = as.integer(pval < alpha_level),
+    k = factor(k),
+    signal_cluster = factor(signal_cluster),
+    signal_mode = factor(signal_mode),
+    method = factor(method)
+  ) %>%
+  filter(beta == 0)
+
+## -------------------- same method reference level --------------------
+preferred_order <- c(
+  "GLaD_0.5_unweighted",
+  "GLaD_0.5_weighted",
+  "GLaD_1_unweighted",
+  "GLaD_1_weighted",
+  "GUniFrac",
+  "unifrac_unweighted",
+  "unifrac_weighted_phyloseq",
+  "aitchison",
+  "bray",
+  "euclidean",
+  "jaccard"
+)
+
+method_levels <- unique(dat_type1$method)
+preferred_order <- preferred_order[preferred_order %in% method_levels]
+other_methods <- setdiff(sort(method_levels), preferred_order)
+dat_type1$method <- factor(dat_type1$method, levels = c(preferred_order, other_methods))
+
+## -------------------- standardize continuous covariates --------------------
+scale2 <- function(x) as.numeric(scale(x))
+
+dat_type1 <- dat_type1 %>%
+  mutate(
+    z_n_otu = scale2(cluster_n_otus_template),
+    z_silhouette = scale2(cluster_avg_silhouette),
+    z_mean_rel_abund = scale2(cluster_mean_relative_abundance),
+    z_mean_prev = scale2(cluster_mean_prevalence),
+    z_within_cop = scale2(within_cop_mean)
+  )
+
+## -------------------- fit joint GLMM --------------------
+fit_type1_joint <- glmer(
+  fp ~
+    method +
+    signal_mode +
+    z_n_otu +
+    z_silhouette +
+    z_mean_rel_abund +
+    z_mean_prev +
+    z_within_cop +
+    method:z_n_otu +
+    method:z_silhouette +
+    method:z_mean_rel_abund +
+    method:z_mean_prev +
+    method:z_within_cop +
+    (1 | k/signal_cluster),
+  data = dat_type1,
+  family = binomial(),
+  control = glmerControl(
+    optimizer = "bobyqa",
+    optCtrl = list(maxfun = 3e5)
+  )
+)
+
+cat("\n============================================================\n")
+cat("JOINT TYPE I ERROR MODEL SUMMARY\n")
+cat("============================================================\n\n")
+print(summary(fit_type1_joint))
+
+## -------------------- coefficient table --------------------
+sm_type1 <- coef(summary(fit_type1_joint))
+
+type1_coef_table <- data.frame(
+  term = rownames(sm_type1),
+  estimate = sm_type1[, "Estimate"],
+  std_error = sm_type1[, "Std. Error"],
+  z_value = sm_type1[, "z value"],
+  p_value = sm_type1[, "Pr(>|z|)"],
+  odds_ratio = exp(sm_type1[, "Estimate"]),
+  row.names = NULL,
+  stringsAsFactors = FALSE
+)
+
+cat("\n============================================================\n")
+cat("JOINT TYPE I ERROR MODEL COEFFICIENT TABLE\n")
+cat("============================================================\n\n")
+print(type1_coef_table, row.names = FALSE)
+
+## -------------------- extract direct method-comparison interaction terms --------------------
+feature_terms <- c(
+  "z_n_otu",
+  "z_silhouette",
+  "z_mean_rel_abund",
+  "z_mean_prev",
+  "z_within_cop"
+)
+
+interaction_pattern <- paste0("method.*:(", paste(feature_terms, collapse = "|"), ")$")
+
+type1_method_feature_interactions <- type1_coef_table %>%
+  filter(grepl(interaction_pattern, term)) %>%
+  mutate(abs_estimate = abs(estimate)) %>%
+  arrange(p_value, desc(abs_estimate))
+
+cat("\n============================================================\n")
+cat("JOINT TYPE I ERROR MODEL: METHOD x FEATURE INTERACTIONS\n")
+cat("These terms directly tell you whether a method differs from the reference method\n")
+cat("in its dependence on a given cluster feature.\n")
+cat("============================================================\n\n")
+print(type1_method_feature_interactions, row.names = FALSE)
+
+## -------------------- simple per-method effective slopes --------------------
+all_methods <- levels(dat_type1$method)
+ref_method <- all_methods[1]
+
+get_effective_slope_table <- function(coef_tab, methods, feature_terms, ref_method) {
+  out <- list()
+  
+  for (feat in feature_terms) {
+    main_est <- coef_tab$estimate[match(feat, coef_tab$term)]
+    if (length(main_est) == 0 || is.na(main_est)) main_est <- 0
+    
+    for (m in methods) {
+      if (m == ref_method) {
+        est <- main_est
+      } else {
+        int_term <- paste0("method", m, ":", feat)
+        int_est <- coef_tab$estimate[match(int_term, coef_tab$term)]
+        if (length(int_est) == 0 || is.na(int_est)) int_est <- 0
+        est <- main_est + int_est
+      }
+      
+      out[[length(out) + 1]] <- data.frame(
+        method = m,
+        feature = feat,
+        log_odds_slope = est,
+        odds_ratio = exp(est),
+        stringsAsFactors = FALSE
+      )
+    }
+  }
+  
+  bind_rows(out)
+}
+
+type1_effective_slopes <- get_effective_slope_table(
+  coef_tab = type1_coef_table,
+  methods = all_methods,
+  feature_terms = feature_terms,
+  ref_method = ref_method
+) %>%
+  arrange(method, feature)
+
+cat("\n============================================================\n")
+cat("JOINT TYPE I ERROR MODEL: EFFECTIVE PER-METHOD FEATURE SLOPES\n")
+cat("These are the implied odds ratios for each method and each feature.\n")
+cat("============================================================\n\n")
+print(type1_effective_slopes, row.names = FALSE)
+
+## -------------------- top features per method --------------------
+type1_feature_rank <- type1_effective_slopes %>%
+  mutate(
+    abs_log_odds_slope = abs(log_odds_slope),
+    direction = ifelse(log_odds_slope > 0, "increase type I error", "decrease type I error")
+  ) %>%
+  arrange(method, desc(abs_log_odds_slope))
+
+cat("\n============================================================\n")
+cat("JOINT TYPE I ERROR MODEL: FEATURE IMPORTANCE BY METHOD\n")
+cat("============================================================\n\n")
+print(type1_feature_rank, row.names = FALSE)
+```
+
+```{r}
+## =========================================================
+## CONTRAST TESTS FOR JOINT TYPE I ERROR MODEL
+## Compare method-specific slopes for the 4 cluster features
+## =========================================================
+
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(emmeans)
+})
+
+feature_vars <- c(
+  "z_within_cop",
+  "z_mean_rel_abund",
+  "z_mean_prev",
+  "z_n_otu"
+)
+
+get_method_slope_contrasts <- function(fit, var_name, adjust_method = "tukey") {
+  
+  tr <- emtrends(
+    fit,
+    specs = "method",
+    var = var_name
+  )
+  
+  pw <- pairs(tr, adjust = adjust_method)
+  
+  tr_df <- as.data.frame(summary(tr))
+  pw_df <- as.data.frame(summary(pw))
+  
+  tr_df$feature <- var_name
+  pw_df$feature <- var_name
+  
+  list(
+    trends = tr_df,
+    contrasts = pw_df
+  )
+}
+
+type1_contrast_results <- lapply(feature_vars, function(v) {
+  get_method_slope_contrasts(fit_type1_joint, v, adjust_method = "tukey")
+})
+names(type1_contrast_results) <- feature_vars
+
+## -------------------- print estimated slopes --------------------
+cat("\n============================================================\n")
+cat("JOINT TYPE I ERROR MODEL: ESTIMATED METHOD-SPECIFIC SLOPES\n")
+cat("============================================================\n\n")
+
+type1_slopes_all <- bind_rows(lapply(type1_contrast_results, `[[`, "trends")) %>%
+  arrange(feature, method)
+
+print(type1_slopes_all, row.names = FALSE)
+
+## -------------------- print pairwise slope contrasts --------------------
+cat("\n============================================================\n")
+cat("JOINT TYPE I ERROR MODEL: PAIRWISE CONTRAST TESTS OF METHOD SLOPES\n")
+cat("Null: two methods have the same slope for a given feature\n")
+cat("============================================================\n\n")
+
+type1_pairwise_all <- bind_rows(lapply(type1_contrast_results, `[[`, "contrasts")) %>%
+  arrange(feature, contrast)
+
+print(type1_pairwise_all, row.names = FALSE)
+
+## -------------------- if you only want significant contrasts --------------------
+cat("\n============================================================\n")
+cat("JOINT TYPE I ERROR MODEL: SIGNIFICANT METHOD CONTRASTS (p < 0.05)\n")
+cat("============================================================\n\n")
+
+type1_pairwise_sig <- type1_pairwise_all %>%
+  filter(p.value < 0.05) %>%
+  arrange(feature, p.value)
+
+print(type1_pairwise_sig, row.names = FALSE)
+```
+

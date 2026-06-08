@@ -1,0 +1,661 @@
+method,cluster_ordered,beta,n,n_reject,power
+"GLaD(0.5), weighted",1,0.6,100,38,0.38
+"GLaD(0.5), weighted",1,0.8,100,49,0.49
+"GLaD(0.5), weighted",1,1.2,100,71,0.71
+"GLaD(0.5), weighted",1,1.6,100,84,0.84
+"GLaD(0.5), weighted",1,2,100,98,0.98
+"GLaD(0.5), weighted",2,0.6,100,28,0.28
+"GLaD(0.5), weighted",2,0.8,100,26,0.26
+"GLaD(0.5), weighted",2,1.2,100,50,0.5
+"GLaD(0.5), weighted",2,1.6,100,47,0.47
+"GLaD(0.5), weighted",2,2,100,76,0.76
+"GLaD(0.5), weighted",3,0.6,100,11,0.11
+"GLaD(0.5), weighted",3,0.8,100,20,0.2
+"GLaD(0.5), weighted",3,1.2,100,41,0.41
+"GLaD(0.5), weighted",3,1.6,100,50,0.5
+"GLaD(0.5), weighted",3,2,100,61,0.61
+"GLaD(0.5), weighted",4,0.6,100,14,0.14
+"GLaD(0.5), weighted",4,0.8,100,7,0.07
+"GLaD(0.5), weighted",4,1.2,100,13,0.13
+"GLaD(0.5), weighted",4,1.6,100,28,0.28
+"GLaD(0.5), weighted",4,2,100,28,0.28
+"GLaD(0.5), weighted",5,0.6,100,12,0.12
+"GLaD(0.5), weighted",5,0.8,100,23,0.23
+"GLaD(0.5), weighted",5,1.2,100,45,0.45
+"GLaD(0.5), weighted",5,1.6,100,60,0.6
+"GLaD(0.5), weighted",5,2,100,67,0.67
+"GLaD(0.5), weighted",6,0.6,100,12,0.12
+"GLaD(0.5), weighted",6,0.8,100,8,0.08
+"GLaD(0.5), weighted",6,1.2,100,12,0.12
+"GLaD(0.5), weighted",6,1.6,100,20,0.2
+"GLaD(0.5), weighted",6,2,100,23,0.23
+"GLaD(0.5), weighted",7,0.6,100,8,0.08
+"GLaD(0.5), weighted",7,0.8,100,14,0.14
+"GLaD(0.5), weighted",7,1.2,100,16,0.16
+"GLaD(0.5), weighted",7,1.6,100,22,0.22
+"GLaD(0.5), weighted",7,2,100,26,0.26
+"GLaD(0.5), weighted",8,0.6,100,6,0.06
+"GLaD(0.5), weighted",8,0.8,100,6,0.06
+"GLaD(0.5), weighted",8,1.2,100,14,0.14
+"GLaD(0.5), weighted",8,1.6,100,9,0.09
+"GLaD(0.5), weighted",8,2,100,22,0.22
+"GLaD(0.5), weighted",9,0.6,100,9,0.09
+"GLaD(0.5), weighted",9,0.8,100,5,0.05
+"GLaD(0.5), weighted",9,1.2,100,8,0.08
+"GLaD(0.5), weighted",9,1.6,100,11,0.11
+"GLaD(0.5), weighted",9,2,100,8,0.08
+"GLaD(0.5), weighted",10,0.6,100,8,0.08
+"GLaD(0.5), weighted",10,0.8,100,8,0.08
+"GLaD(0.5), weighted",10,1.2,100,6,0.06
+"GLaD(0.5), weighted",10,1.6,100,15,0.15
+"GLaD(0.5), weighted",10,2,100,21,0.21
+"GLaD(0.5), weighted",11,0.6,100,5,0.05
+"GLaD(0.5), weighted",11,0.8,100,8,0.08
+"GLaD(0.5), weighted",11,1.2,100,9,0.09
+"GLaD(0.5), weighted",11,1.6,100,8,0.08
+"GLaD(0.5), weighted",11,2,100,12,0.12
+"GLaD(0.5), weighted",12,0.6,100,1,0.01
+"GLaD(0.5), weighted",12,0.8,100,6,0.06
+"GLaD(0.5), weighted",12,1.2,100,5,0.05
+"GLaD(0.5), weighted",12,1.6,100,5,0.05
+"GLaD(0.5), weighted",12,2,100,3,0.03
+"GLaD(0.5), unweighted",1,0.6,100,23,0.23
+"GLaD(0.5), unweighted",1,0.8,100,16,0.16
+"GLaD(0.5), unweighted",1,1.2,100,23,0.23
+"GLaD(0.5), unweighted",1,1.6,100,36,0.36
+"GLaD(0.5), unweighted",1,2,100,40,0.4
+"GLaD(0.5), unweighted",2,0.6,100,12,0.12
+"GLaD(0.5), unweighted",2,0.8,100,6,0.06
+"GLaD(0.5), unweighted",2,1.2,100,13,0.13
+"GLaD(0.5), unweighted",2,1.6,100,14,0.14
+"GLaD(0.5), unweighted",2,2,100,23,0.23
+"GLaD(0.5), unweighted",3,0.6,100,6,0.06
+"GLaD(0.5), unweighted",3,0.8,100,20,0.2
+"GLaD(0.5), unweighted",3,1.2,100,13,0.13
+"GLaD(0.5), unweighted",3,1.6,100,23,0.23
+"GLaD(0.5), unweighted",3,2,100,30,0.3
+"GLaD(0.5), unweighted",4,0.6,100,11,0.11
+"GLaD(0.5), unweighted",4,0.8,100,11,0.11
+"GLaD(0.5), unweighted",4,1.2,100,16,0.16
+"GLaD(0.5), unweighted",4,1.6,100,25,0.25
+"GLaD(0.5), unweighted",4,2,100,34,0.34
+"GLaD(0.5), unweighted",5,0.6,100,6,0.06
+"GLaD(0.5), unweighted",5,0.8,100,6,0.06
+"GLaD(0.5), unweighted",5,1.2,100,17,0.17
+"GLaD(0.5), unweighted",5,1.6,100,15,0.15
+"GLaD(0.5), unweighted",5,2,100,21,0.21
+"GLaD(0.5), unweighted",6,0.6,100,4,0.04
+"GLaD(0.5), unweighted",6,0.8,100,2,0.02
+"GLaD(0.5), unweighted",6,1.2,100,10,0.1
+"GLaD(0.5), unweighted",6,1.6,100,12,0.12
+"GLaD(0.5), unweighted",6,2,100,12,0.12
+"GLaD(0.5), unweighted",7,0.6,100,5,0.05
+"GLaD(0.5), unweighted",7,0.8,100,17,0.17
+"GLaD(0.5), unweighted",7,1.2,100,24,0.24
+"GLaD(0.5), unweighted",7,1.6,100,38,0.38
+"GLaD(0.5), unweighted",7,2,100,43,0.43
+"GLaD(0.5), unweighted",8,0.6,100,14,0.14
+"GLaD(0.5), unweighted",8,0.8,100,20,0.2
+"GLaD(0.5), unweighted",8,1.2,100,30,0.3
+"GLaD(0.5), unweighted",8,1.6,100,40,0.4
+"GLaD(0.5), unweighted",8,2,100,58,0.58
+"GLaD(0.5), unweighted",9,0.6,100,8,0.08
+"GLaD(0.5), unweighted",9,0.8,100,4,0.04
+"GLaD(0.5), unweighted",9,1.2,100,23,0.23
+"GLaD(0.5), unweighted",9,1.6,100,25,0.25
+"GLaD(0.5), unweighted",9,2,100,29,0.29
+"GLaD(0.5), unweighted",10,0.6,100,7,0.07
+"GLaD(0.5), unweighted",10,0.8,100,9,0.09
+"GLaD(0.5), unweighted",10,1.2,100,18,0.18
+"GLaD(0.5), unweighted",10,1.6,100,27,0.27
+"GLaD(0.5), unweighted",10,2,100,43,0.43
+"GLaD(0.5), unweighted",11,0.6,100,10,0.1
+"GLaD(0.5), unweighted",11,0.8,100,10,0.1
+"GLaD(0.5), unweighted",11,1.2,100,16,0.16
+"GLaD(0.5), unweighted",11,1.6,100,22,0.22
+"GLaD(0.5), unweighted",11,2,100,25,0.25
+"GLaD(0.5), unweighted",12,0.6,100,12,0.12
+"GLaD(0.5), unweighted",12,0.8,100,11,0.11
+"GLaD(0.5), unweighted",12,1.2,100,32,0.32
+"GLaD(0.5), unweighted",12,1.6,100,43,0.43
+"GLaD(0.5), unweighted",12,2,100,64,0.64
+"GLaD(1), weighted",1,0.6,100,42,0.42
+"GLaD(1), weighted",1,0.8,100,54,0.54
+"GLaD(1), weighted",1,1.2,100,74,0.74
+"GLaD(1), weighted",1,1.6,100,85,0.85
+"GLaD(1), weighted",1,2,100,98,0.98
+"GLaD(1), weighted",2,0.6,100,21,0.21
+"GLaD(1), weighted",2,0.8,100,10,0.1
+"GLaD(1), weighted",2,1.2,100,26,0.26
+"GLaD(1), weighted",2,1.6,100,26,0.26
+"GLaD(1), weighted",2,2,100,41,0.41
+"GLaD(1), weighted",3,0.6,100,6,0.06
+"GLaD(1), weighted",3,0.8,100,11,0.11
+"GLaD(1), weighted",3,1.2,100,15,0.15
+"GLaD(1), weighted",3,1.6,100,24,0.24
+"GLaD(1), weighted",3,2,100,27,0.27
+"GLaD(1), weighted",4,0.6,100,7,0.07
+"GLaD(1), weighted",4,0.8,100,2,0.02
+"GLaD(1), weighted",4,1.2,100,7,0.07
+"GLaD(1), weighted",4,1.6,100,14,0.14
+"GLaD(1), weighted",4,2,100,12,0.12
+"GLaD(1), weighted",5,0.6,100,9,0.09
+"GLaD(1), weighted",5,0.8,100,17,0.17
+"GLaD(1), weighted",5,1.2,100,35,0.35
+"GLaD(1), weighted",5,1.6,100,47,0.47
+"GLaD(1), weighted",5,2,100,51,0.51
+"GLaD(1), weighted",6,0.6,100,10,0.1
+"GLaD(1), weighted",6,0.8,100,6,0.06
+"GLaD(1), weighted",6,1.2,100,6,0.06
+"GLaD(1), weighted",6,1.6,100,12,0.12
+"GLaD(1), weighted",6,2,100,9,0.09
+"GLaD(1), weighted",7,0.6,100,3,0.03
+"GLaD(1), weighted",7,0.8,100,9,0.09
+"GLaD(1), weighted",7,1.2,100,14,0.14
+"GLaD(1), weighted",7,1.6,100,19,0.19
+"GLaD(1), weighted",7,2,100,16,0.16
+"GLaD(1), weighted",8,0.6,100,4,0.04
+"GLaD(1), weighted",8,0.8,100,4,0.04
+"GLaD(1), weighted",8,1.2,100,8,0.08
+"GLaD(1), weighted",8,1.6,100,3,0.03
+"GLaD(1), weighted",8,2,100,12,0.12
+"GLaD(1), weighted",9,0.6,100,7,0.07
+"GLaD(1), weighted",9,0.8,100,9,0.09
+"GLaD(1), weighted",9,1.2,100,5,0.05
+"GLaD(1), weighted",9,1.6,100,7,0.07
+"GLaD(1), weighted",9,2,100,7,0.07
+"GLaD(1), weighted",10,0.6,100,9,0.09
+"GLaD(1), weighted",10,0.8,100,7,0.07
+"GLaD(1), weighted",10,1.2,100,6,0.06
+"GLaD(1), weighted",10,1.6,100,8,0.08
+"GLaD(1), weighted",10,2,100,17,0.17
+"GLaD(1), weighted",11,0.6,100,5,0.05
+"GLaD(1), weighted",11,0.8,100,9,0.09
+"GLaD(1), weighted",11,1.2,100,8,0.08
+"GLaD(1), weighted",11,1.6,100,6,0.06
+"GLaD(1), weighted",11,2,100,9,0.09
+"GLaD(1), weighted",12,0.6,100,3,0.03
+"GLaD(1), weighted",12,0.8,100,5,0.05
+"GLaD(1), weighted",12,1.2,100,8,0.08
+"GLaD(1), weighted",12,1.6,100,6,0.06
+"GLaD(1), weighted",12,2,100,3,0.03
+"GLaD(1), unweighted",1,0.6,100,9,0.09
+"GLaD(1), unweighted",1,0.8,100,10,0.1
+"GLaD(1), unweighted",1,1.2,100,20,0.2
+"GLaD(1), unweighted",1,1.6,100,20,0.2
+"GLaD(1), unweighted",1,2,100,24,0.24
+"GLaD(1), unweighted",2,0.6,100,3,0.03
+"GLaD(1), unweighted",2,0.8,100,6,0.06
+"GLaD(1), unweighted",2,1.2,100,7,0.07
+"GLaD(1), unweighted",2,1.6,100,7,0.07
+"GLaD(1), unweighted",2,2,100,7,0.07
+"GLaD(1), unweighted",3,0.6,100,5,0.05
+"GLaD(1), unweighted",3,0.8,100,9,0.09
+"GLaD(1), unweighted",3,1.2,100,11,0.11
+"GLaD(1), unweighted",3,1.6,100,18,0.18
+"GLaD(1), unweighted",3,2,100,21,0.21
+"GLaD(1), unweighted",4,0.6,100,10,0.1
+"GLaD(1), unweighted",4,0.8,100,1,0.01
+"GLaD(1), unweighted",4,1.2,100,8,0.08
+"GLaD(1), unweighted",4,1.6,100,3,0.03
+"GLaD(1), unweighted",4,2,100,5,0.05
+"GLaD(1), unweighted",5,0.6,100,3,0.03
+"GLaD(1), unweighted",5,0.8,100,6,0.06
+"GLaD(1), unweighted",5,1.2,100,10,0.1
+"GLaD(1), unweighted",5,1.6,100,6,0.06
+"GLaD(1), unweighted",5,2,100,15,0.15
+"GLaD(1), unweighted",6,0.6,100,3,0.03
+"GLaD(1), unweighted",6,0.8,100,2,0.02
+"GLaD(1), unweighted",6,1.2,100,7,0.07
+"GLaD(1), unweighted",6,1.6,100,7,0.07
+"GLaD(1), unweighted",6,2,100,7,0.07
+"GLaD(1), unweighted",7,0.6,100,10,0.1
+"GLaD(1), unweighted",7,0.8,100,19,0.19
+"GLaD(1), unweighted",7,1.2,100,19,0.19
+"GLaD(1), unweighted",7,1.6,100,28,0.28
+"GLaD(1), unweighted",7,2,100,33,0.33
+"GLaD(1), unweighted",8,0.6,100,10,0.1
+"GLaD(1), unweighted",8,0.8,100,8,0.08
+"GLaD(1), unweighted",8,1.2,100,15,0.15
+"GLaD(1), unweighted",8,1.6,100,24,0.24
+"GLaD(1), unweighted",8,2,100,31,0.31
+"GLaD(1), unweighted",9,0.6,100,8,0.08
+"GLaD(1), unweighted",9,0.8,100,3,0.03
+"GLaD(1), unweighted",9,1.2,100,14,0.14
+"GLaD(1), unweighted",9,1.6,100,19,0.19
+"GLaD(1), unweighted",9,2,100,13,0.13
+"GLaD(1), unweighted",10,0.6,100,6,0.06
+"GLaD(1), unweighted",10,0.8,100,11,0.11
+"GLaD(1), unweighted",10,1.2,100,9,0.09
+"GLaD(1), unweighted",10,1.6,100,29,0.29
+"GLaD(1), unweighted",10,2,100,31,0.31
+"GLaD(1), unweighted",11,0.6,100,5,0.05
+"GLaD(1), unweighted",11,0.8,100,7,0.07
+"GLaD(1), unweighted",11,1.2,100,15,0.15
+"GLaD(1), unweighted",11,1.6,100,10,0.1
+"GLaD(1), unweighted",11,2,100,15,0.15
+"GLaD(1), unweighted",12,0.6,100,6,0.06
+"GLaD(1), unweighted",12,0.8,100,14,0.14
+"GLaD(1), unweighted",12,1.2,100,22,0.22
+"GLaD(1), unweighted",12,1.6,100,24,0.24
+"GLaD(1), unweighted",12,2,100,38,0.38
+Euclidean,1,0.6,100,13,0.13
+Euclidean,1,0.8,100,20,0.2
+Euclidean,1,1.2,100,28,0.28
+Euclidean,1,1.6,100,41,0.41
+Euclidean,1,2,100,63,0.63
+Euclidean,2,0.6,100,34,0.34
+Euclidean,2,0.8,100,31,0.31
+Euclidean,2,1.2,100,50,0.5
+Euclidean,2,1.6,100,55,0.55
+Euclidean,2,2,100,82,0.82
+Euclidean,3,0.6,100,7,0.07
+Euclidean,3,0.8,100,18,0.18
+Euclidean,3,1.2,100,32,0.32
+Euclidean,3,1.6,100,39,0.39
+Euclidean,3,2,100,51,0.51
+Euclidean,4,0.6,100,15,0.15
+Euclidean,4,0.8,100,11,0.11
+Euclidean,4,1.2,100,19,0.19
+Euclidean,4,1.6,100,37,0.37
+Euclidean,4,2,100,45,0.45
+Euclidean,5,0.6,100,9,0.09
+Euclidean,5,0.8,100,21,0.21
+Euclidean,5,1.2,100,36,0.36
+Euclidean,5,1.6,100,51,0.51
+Euclidean,5,2,100,62,0.62
+Euclidean,6,0.6,100,7,0.07
+Euclidean,6,0.8,100,6,0.06
+Euclidean,6,1.2,100,14,0.14
+Euclidean,6,1.6,100,21,0.21
+Euclidean,6,2,100,22,0.22
+Euclidean,7,0.6,100,6,0.06
+Euclidean,7,0.8,100,14,0.14
+Euclidean,7,1.2,100,17,0.17
+Euclidean,7,1.6,100,15,0.15
+Euclidean,7,2,100,18,0.18
+Euclidean,8,0.6,100,6,0.06
+Euclidean,8,0.8,100,4,0.04
+Euclidean,8,1.2,100,8,0.08
+Euclidean,8,1.6,100,10,0.1
+Euclidean,8,2,100,23,0.23
+Euclidean,9,0.6,100,10,0.1
+Euclidean,9,0.8,100,2,0.02
+Euclidean,9,1.2,100,6,0.06
+Euclidean,9,1.6,100,11,0.11
+Euclidean,9,2,100,12,0.12
+Euclidean,10,0.6,100,6,0.06
+Euclidean,10,0.8,100,6,0.06
+Euclidean,10,1.2,100,8,0.08
+Euclidean,10,1.6,100,16,0.16
+Euclidean,10,2,100,23,0.23
+Euclidean,11,0.6,100,5,0.05
+Euclidean,11,0.8,100,11,0.11
+Euclidean,11,1.2,100,4,0.04
+Euclidean,11,1.6,100,8,0.08
+Euclidean,11,2,100,11,0.11
+Euclidean,12,0.6,100,2,0.02
+Euclidean,12,0.8,100,8,0.08
+Euclidean,12,1.2,100,6,0.06
+Euclidean,12,1.6,100,4,0.04
+Euclidean,12,2,100,6,0.06
+Bray-Curtis,1,0.6,100,21,0.21
+Bray-Curtis,1,0.8,100,16,0.16
+Bray-Curtis,1,1.2,100,31,0.31
+Bray-Curtis,1,1.6,100,55,0.55
+Bray-Curtis,1,2,100,74,0.74
+Bray-Curtis,2,0.6,100,26,0.26
+Bray-Curtis,2,0.8,100,25,0.25
+Bray-Curtis,2,1.2,100,46,0.46
+Bray-Curtis,2,1.6,100,50,0.5
+Bray-Curtis,2,2,100,80,0.8
+Bray-Curtis,3,0.6,100,8,0.08
+Bray-Curtis,3,0.8,100,17,0.17
+Bray-Curtis,3,1.2,100,41,0.41
+Bray-Curtis,3,1.6,100,54,0.54
+Bray-Curtis,3,2,100,60,0.6
+Bray-Curtis,4,0.6,100,20,0.2
+Bray-Curtis,4,0.8,100,24,0.24
+Bray-Curtis,4,1.2,100,42,0.42
+Bray-Curtis,4,1.6,100,66,0.66
+Bray-Curtis,4,2,100,71,0.71
+Bray-Curtis,5,0.6,100,10,0.1
+Bray-Curtis,5,0.8,100,25,0.25
+Bray-Curtis,5,1.2,100,46,0.46
+Bray-Curtis,5,1.6,100,51,0.51
+Bray-Curtis,5,2,100,68,0.68
+Bray-Curtis,6,0.6,100,16,0.16
+Bray-Curtis,6,0.8,100,10,0.1
+Bray-Curtis,6,1.2,100,29,0.29
+Bray-Curtis,6,1.6,100,35,0.35
+Bray-Curtis,6,2,100,49,0.49
+Bray-Curtis,7,0.6,100,9,0.09
+Bray-Curtis,7,0.8,100,16,0.16
+Bray-Curtis,7,1.2,100,26,0.26
+Bray-Curtis,7,1.6,100,29,0.29
+Bray-Curtis,7,2,100,40,0.4
+Bray-Curtis,8,0.6,100,9,0.09
+Bray-Curtis,8,0.8,100,10,0.1
+Bray-Curtis,8,1.2,100,20,0.2
+Bray-Curtis,8,1.6,100,33,0.33
+Bray-Curtis,8,2,100,50,0.5
+Bray-Curtis,9,0.6,100,9,0.09
+Bray-Curtis,9,0.8,100,5,0.05
+Bray-Curtis,9,1.2,100,20,0.2
+Bray-Curtis,9,1.6,100,33,0.33
+Bray-Curtis,9,2,100,25,0.25
+Bray-Curtis,10,0.6,100,10,0.1
+Bray-Curtis,10,0.8,100,7,0.07
+Bray-Curtis,10,1.2,100,19,0.19
+Bray-Curtis,10,1.6,100,26,0.26
+Bray-Curtis,10,2,100,31,0.31
+Bray-Curtis,11,0.6,100,6,0.06
+Bray-Curtis,11,0.8,100,14,0.14
+Bray-Curtis,11,1.2,100,15,0.15
+Bray-Curtis,11,1.6,100,12,0.12
+Bray-Curtis,11,2,100,17,0.17
+Bray-Curtis,12,0.6,100,2,0.02
+Bray-Curtis,12,0.8,100,7,0.07
+Bray-Curtis,12,1.2,100,7,0.07
+Bray-Curtis,12,1.6,100,10,0.1
+Bray-Curtis,12,2,100,9,0.09
+Jaccard,1,0.6,100,20,0.2
+Jaccard,1,0.8,100,16,0.16
+Jaccard,1,1.2,100,32,0.32
+Jaccard,1,1.6,100,56,0.56
+Jaccard,1,2,100,73,0.73
+Jaccard,2,0.6,100,26,0.26
+Jaccard,2,0.8,100,25,0.25
+Jaccard,2,1.2,100,43,0.43
+Jaccard,2,1.6,100,49,0.49
+Jaccard,2,2,100,75,0.75
+Jaccard,3,0.6,100,7,0.07
+Jaccard,3,0.8,100,20,0.2
+Jaccard,3,1.2,100,40,0.4
+Jaccard,3,1.6,100,51,0.51
+Jaccard,3,2,100,57,0.57
+Jaccard,4,0.6,100,21,0.21
+Jaccard,4,0.8,100,24,0.24
+Jaccard,4,1.2,100,45,0.45
+Jaccard,4,1.6,100,68,0.68
+Jaccard,4,2,100,75,0.75
+Jaccard,5,0.6,100,12,0.12
+Jaccard,5,0.8,100,26,0.26
+Jaccard,5,1.2,100,42,0.42
+Jaccard,5,1.6,100,52,0.52
+Jaccard,5,2,100,68,0.68
+Jaccard,6,0.6,100,15,0.15
+Jaccard,6,0.8,100,9,0.09
+Jaccard,6,1.2,100,25,0.25
+Jaccard,6,1.6,100,36,0.36
+Jaccard,6,2,100,47,0.47
+Jaccard,7,0.6,100,8,0.08
+Jaccard,7,0.8,100,16,0.16
+Jaccard,7,1.2,100,26,0.26
+Jaccard,7,1.6,100,27,0.27
+Jaccard,7,2,100,37,0.37
+Jaccard,8,0.6,100,9,0.09
+Jaccard,8,0.8,100,12,0.12
+Jaccard,8,1.2,100,18,0.18
+Jaccard,8,1.6,100,33,0.33
+Jaccard,8,2,100,52,0.52
+Jaccard,9,0.6,100,9,0.09
+Jaccard,9,0.8,100,7,0.07
+Jaccard,9,1.2,100,20,0.2
+Jaccard,9,1.6,100,33,0.33
+Jaccard,9,2,100,27,0.27
+Jaccard,10,0.6,100,9,0.09
+Jaccard,10,0.8,100,6,0.06
+Jaccard,10,1.2,100,18,0.18
+Jaccard,10,1.6,100,25,0.25
+Jaccard,10,2,100,30,0.3
+Jaccard,11,0.6,100,5,0.05
+Jaccard,11,0.8,100,13,0.13
+Jaccard,11,1.2,100,12,0.12
+Jaccard,11,1.6,100,10,0.1
+Jaccard,11,2,100,17,0.17
+Jaccard,12,0.6,100,3,0.03
+Jaccard,12,0.8,100,7,0.07
+Jaccard,12,1.2,100,7,0.07
+Jaccard,12,1.6,100,13,0.13
+Jaccard,12,2,100,9,0.09
+Aitchison,1,0.6,100,21,0.21
+Aitchison,1,0.8,100,15,0.15
+Aitchison,1,1.2,100,28,0.28
+Aitchison,1,1.6,100,34,0.34
+Aitchison,1,2,100,49,0.49
+Aitchison,2,0.6,100,16,0.16
+Aitchison,2,0.8,100,10,0.1
+Aitchison,2,1.2,100,19,0.19
+Aitchison,2,1.6,100,18,0.18
+Aitchison,2,2,100,38,0.38
+Aitchison,3,0.6,100,6,0.06
+Aitchison,3,0.8,100,13,0.13
+Aitchison,3,1.2,100,16,0.16
+Aitchison,3,1.6,100,23,0.23
+Aitchison,3,2,100,21,0.21
+Aitchison,4,0.6,100,13,0.13
+Aitchison,4,0.8,100,12,0.12
+Aitchison,4,1.2,100,25,0.25
+Aitchison,4,1.6,100,43,0.43
+Aitchison,4,2,100,48,0.48
+Aitchison,5,0.6,100,12,0.12
+Aitchison,5,0.8,100,12,0.12
+Aitchison,5,1.2,100,20,0.2
+Aitchison,5,1.6,100,24,0.24
+Aitchison,5,2,100,28,0.28
+Aitchison,6,0.6,100,8,0.08
+Aitchison,6,0.8,100,6,0.06
+Aitchison,6,1.2,100,10,0.1
+Aitchison,6,1.6,100,21,0.21
+Aitchison,6,2,100,17,0.17
+Aitchison,7,0.6,100,7,0.07
+Aitchison,7,0.8,100,17,0.17
+Aitchison,7,1.2,100,23,0.23
+Aitchison,7,1.6,100,29,0.29
+Aitchison,7,2,100,38,0.38
+Aitchison,8,0.6,100,23,0.23
+Aitchison,8,0.8,100,22,0.22
+Aitchison,8,1.2,100,34,0.34
+Aitchison,8,1.6,100,46,0.46
+Aitchison,8,2,100,65,0.65
+Aitchison,9,0.6,100,8,0.08
+Aitchison,9,0.8,100,5,0.05
+Aitchison,9,1.2,100,20,0.2
+Aitchison,9,1.6,100,31,0.31
+Aitchison,9,2,100,35,0.35
+Aitchison,10,0.6,100,8,0.08
+Aitchison,10,0.8,100,8,0.08
+Aitchison,10,1.2,100,23,0.23
+Aitchison,10,1.6,100,32,0.32
+Aitchison,10,2,100,42,0.42
+Aitchison,11,0.6,100,7,0.07
+Aitchison,11,0.8,100,8,0.08
+Aitchison,11,1.2,100,12,0.12
+Aitchison,11,1.6,100,25,0.25
+Aitchison,11,2,100,21,0.21
+Aitchison,12,0.6,100,10,0.1
+Aitchison,12,0.8,100,14,0.14
+Aitchison,12,1.2,100,21,0.21
+Aitchison,12,1.6,100,32,0.32
+Aitchison,12,2,100,43,0.43
+"UniFrac, unweighted",1,0.6,100,14,0.14
+"UniFrac, unweighted",1,0.8,100,14,0.14
+"UniFrac, unweighted",1,1.2,100,18,0.18
+"UniFrac, unweighted",1,1.6,100,23,0.23
+"UniFrac, unweighted",1,2,100,24,0.24
+"UniFrac, unweighted",2,0.6,100,12,0.12
+"UniFrac, unweighted",2,0.8,100,7,0.07
+"UniFrac, unweighted",2,1.2,100,10,0.1
+"UniFrac, unweighted",2,1.6,100,14,0.14
+"UniFrac, unweighted",2,2,100,22,0.22
+"UniFrac, unweighted",3,0.6,100,6,0.06
+"UniFrac, unweighted",3,0.8,100,14,0.14
+"UniFrac, unweighted",3,1.2,100,11,0.11
+"UniFrac, unweighted",3,1.6,100,15,0.15
+"UniFrac, unweighted",3,2,100,19,0.19
+"UniFrac, unweighted",4,0.6,100,8,0.08
+"UniFrac, unweighted",4,0.8,100,10,0.1
+"UniFrac, unweighted",4,1.2,100,15,0.15
+"UniFrac, unweighted",4,1.6,100,22,0.22
+"UniFrac, unweighted",4,2,100,23,0.23
+"UniFrac, unweighted",5,0.6,100,8,0.08
+"UniFrac, unweighted",5,0.8,100,9,0.09
+"UniFrac, unweighted",5,1.2,100,13,0.13
+"UniFrac, unweighted",5,1.6,100,14,0.14
+"UniFrac, unweighted",5,2,100,18,0.18
+"UniFrac, unweighted",6,0.6,100,5,0.05
+"UniFrac, unweighted",6,0.8,100,2,0.02
+"UniFrac, unweighted",6,1.2,100,8,0.08
+"UniFrac, unweighted",6,1.6,100,9,0.09
+"UniFrac, unweighted",6,2,100,8,0.08
+"UniFrac, unweighted",7,0.6,100,8,0.08
+"UniFrac, unweighted",7,0.8,100,10,0.1
+"UniFrac, unweighted",7,1.2,100,16,0.16
+"UniFrac, unweighted",7,1.6,100,29,0.29
+"UniFrac, unweighted",7,2,100,27,0.27
+"UniFrac, unweighted",8,0.6,100,11,0.11
+"UniFrac, unweighted",8,0.8,100,16,0.16
+"UniFrac, unweighted",8,1.2,100,18,0.18
+"UniFrac, unweighted",8,1.6,100,27,0.27
+"UniFrac, unweighted",8,2,100,55,0.55
+"UniFrac, unweighted",9,0.6,100,8,0.08
+"UniFrac, unweighted",9,0.8,100,2,0.02
+"UniFrac, unweighted",9,1.2,100,18,0.18
+"UniFrac, unweighted",9,1.6,100,23,0.23
+"UniFrac, unweighted",9,2,100,18,0.18
+"UniFrac, unweighted",10,0.6,100,5,0.05
+"UniFrac, unweighted",10,0.8,100,7,0.07
+"UniFrac, unweighted",10,1.2,100,12,0.12
+"UniFrac, unweighted",10,1.6,100,29,0.29
+"UniFrac, unweighted",10,2,100,35,0.35
+"UniFrac, unweighted",11,0.6,100,11,0.11
+"UniFrac, unweighted",11,0.8,100,10,0.1
+"UniFrac, unweighted",11,1.2,100,18,0.18
+"UniFrac, unweighted",11,1.6,100,21,0.21
+"UniFrac, unweighted",11,2,100,32,0.32
+"UniFrac, unweighted",12,0.6,100,13,0.13
+"UniFrac, unweighted",12,0.8,100,9,0.09
+"UniFrac, unweighted",12,1.2,100,35,0.35
+"UniFrac, unweighted",12,1.6,100,46,0.46
+"UniFrac, unweighted",12,2,100,60,0.6
+"UniFrac, weighted",1,0.6,100,35,0.35
+"UniFrac, weighted",1,0.8,100,42,0.42
+"UniFrac, weighted",1,1.2,100,60,0.6
+"UniFrac, weighted",1,1.6,100,81,0.81
+"UniFrac, weighted",1,2,100,97,0.97
+"UniFrac, weighted",2,0.6,100,26,0.26
+"UniFrac, weighted",2,0.8,100,32,0.32
+"UniFrac, weighted",2,1.2,100,49,0.49
+"UniFrac, weighted",2,1.6,100,60,0.6
+"UniFrac, weighted",2,2,100,79,0.79
+"UniFrac, weighted",3,0.6,100,14,0.14
+"UniFrac, weighted",3,0.8,100,26,0.26
+"UniFrac, weighted",3,1.2,100,58,0.58
+"UniFrac, weighted",3,1.6,100,68,0.68
+"UniFrac, weighted",3,2,100,87,0.87
+"UniFrac, weighted",4,0.6,100,18,0.18
+"UniFrac, weighted",4,0.8,100,15,0.15
+"UniFrac, weighted",4,1.2,100,32,0.32
+"UniFrac, weighted",4,1.6,100,58,0.58
+"UniFrac, weighted",4,2,100,68,0.68
+"UniFrac, weighted",5,0.6,100,14,0.14
+"UniFrac, weighted",5,0.8,100,29,0.29
+"UniFrac, weighted",5,1.2,100,48,0.48
+"UniFrac, weighted",5,1.6,100,61,0.61
+"UniFrac, weighted",5,2,100,73,0.73
+"UniFrac, weighted",6,0.6,100,17,0.17
+"UniFrac, weighted",6,0.8,100,10,0.1
+"UniFrac, weighted",6,1.2,100,24,0.24
+"UniFrac, weighted",6,1.6,100,38,0.38
+"UniFrac, weighted",6,2,100,53,0.53
+"UniFrac, weighted",7,0.6,100,7,0.07
+"UniFrac, weighted",7,0.8,100,17,0.17
+"UniFrac, weighted",7,1.2,100,21,0.21
+"UniFrac, weighted",7,1.6,100,32,0.32
+"UniFrac, weighted",7,2,100,46,0.46
+"UniFrac, weighted",8,0.6,100,8,0.08
+"UniFrac, weighted",8,0.8,100,11,0.11
+"UniFrac, weighted",8,1.2,100,17,0.17
+"UniFrac, weighted",8,1.6,100,24,0.24
+"UniFrac, weighted",8,2,100,40,0.4
+"UniFrac, weighted",9,0.6,100,10,0.1
+"UniFrac, weighted",9,0.8,100,6,0.06
+"UniFrac, weighted",9,1.2,100,13,0.13
+"UniFrac, weighted",9,1.6,100,16,0.16
+"UniFrac, weighted",9,2,100,20,0.2
+"UniFrac, weighted",10,0.6,100,8,0.08
+"UniFrac, weighted",10,0.8,100,7,0.07
+"UniFrac, weighted",10,1.2,100,15,0.15
+"UniFrac, weighted",10,1.6,100,25,0.25
+"UniFrac, weighted",10,2,100,33,0.33
+"UniFrac, weighted",11,0.6,100,6,0.06
+"UniFrac, weighted",11,0.8,100,10,0.1
+"UniFrac, weighted",11,1.2,100,13,0.13
+"UniFrac, weighted",11,1.6,100,11,0.11
+"UniFrac, weighted",11,2,100,18,0.18
+"UniFrac, weighted",12,0.6,100,2,0.02
+"UniFrac, weighted",12,0.8,100,6,0.06
+"UniFrac, weighted",12,1.2,100,11,0.11
+"UniFrac, weighted",12,1.6,100,11,0.11
+"UniFrac, weighted",12,2,100,6,0.06
+GUniFrac(0.5),1,0.6,100,32,0.32
+GUniFrac(0.5),1,0.8,100,36,0.36
+GUniFrac(0.5),1,1.2,100,59,0.59
+GUniFrac(0.5),1,1.6,100,78,0.78
+GUniFrac(0.5),1,2,100,96,0.96
+GUniFrac(0.5),2,0.6,100,21,0.21
+GUniFrac(0.5),2,0.8,100,25,0.25
+GUniFrac(0.5),2,1.2,100,45,0.45
+GUniFrac(0.5),2,1.6,100,56,0.56
+GUniFrac(0.5),2,2,100,77,0.77
+GUniFrac(0.5),3,0.6,100,10,0.1
+GUniFrac(0.5),3,0.8,100,29,0.29
+GUniFrac(0.5),3,1.2,100,48,0.48
+GUniFrac(0.5),3,1.6,100,69,0.69
+GUniFrac(0.5),3,2,100,79,0.79
+GUniFrac(0.5),4,0.6,100,21,0.21
+GUniFrac(0.5),4,0.8,100,20,0.2
+GUniFrac(0.5),4,1.2,100,46,0.46
+GUniFrac(0.5),4,1.6,100,69,0.69
+GUniFrac(0.5),4,2,100,78,0.78
+GUniFrac(0.5),5,0.6,100,11,0.11
+GUniFrac(0.5),5,0.8,100,24,0.24
+GUniFrac(0.5),5,1.2,100,43,0.43
+GUniFrac(0.5),5,1.6,100,54,0.54
+GUniFrac(0.5),5,2,100,67,0.67
+GUniFrac(0.5),6,0.6,100,13,0.13
+GUniFrac(0.5),6,0.8,100,11,0.11
+GUniFrac(0.5),6,1.2,100,31,0.31
+GUniFrac(0.5),6,1.6,100,50,0.5
+GUniFrac(0.5),6,2,100,58,0.58
+GUniFrac(0.5),7,0.6,100,10,0.1
+GUniFrac(0.5),7,0.8,100,20,0.2
+GUniFrac(0.5),7,1.2,100,31,0.31
+GUniFrac(0.5),7,1.6,100,49,0.49
+GUniFrac(0.5),7,2,100,61,0.61
+GUniFrac(0.5),8,0.6,100,11,0.11
+GUniFrac(0.5),8,0.8,100,16,0.16
+GUniFrac(0.5),8,1.2,100,37,0.37
+GUniFrac(0.5),8,1.6,100,49,0.49
+GUniFrac(0.5),8,2,100,68,0.68
+GUniFrac(0.5),9,0.6,100,11,0.11
+GUniFrac(0.5),9,0.8,100,5,0.05
+GUniFrac(0.5),9,1.2,100,27,0.27
+GUniFrac(0.5),9,1.6,100,41,0.41
+GUniFrac(0.5),9,2,100,52,0.52
+GUniFrac(0.5),10,0.6,100,9,0.09
+GUniFrac(0.5),10,0.8,100,13,0.13
+GUniFrac(0.5),10,1.2,100,30,0.3
+GUniFrac(0.5),10,1.6,100,37,0.37
+GUniFrac(0.5),10,2,100,48,0.48
+GUniFrac(0.5),11,0.6,100,9,0.09
+GUniFrac(0.5),11,0.8,100,15,0.15
+GUniFrac(0.5),11,1.2,100,21,0.21
+GUniFrac(0.5),11,1.6,100,19,0.19
+GUniFrac(0.5),11,2,100,36,0.36
+GUniFrac(0.5),12,0.6,100,5,0.05
+GUniFrac(0.5),12,0.8,100,9,0.09
+GUniFrac(0.5),12,1.2,100,20,0.2
+GUniFrac(0.5),12,1.6,100,33,0.33
+GUniFrac(0.5),12,2,100,35,0.35

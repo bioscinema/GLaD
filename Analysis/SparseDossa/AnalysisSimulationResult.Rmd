@@ -1,0 +1,709 @@
+---
+title: "AnalysisSimulationResult"
+author: "Yiqian Zhang"
+date: "2026-04-19"
+output: html_document
+---
+
+```{r}
+## summarize_and_plot_combined_results.R
+## use the single combined csv file
+## no files will be saved; tables are printed and plots are shown on screen
+
+options(stringsAsFactors = FALSE)
+
+INPUT_CSV <-  "beta_div_sparse12_all_results.csv"
+ALPHA <- 0.05
+
+if (!file.exists(INPUT_CSV)) {
+  stop("Combined csv not found: ", INPUT_CSV)
+}
+
+dat <- read.csv(INPUT_CSV, check.names = FALSE)
+
+## remove accidental index columns if present
+bad_cols <- c("X", "...1", "row.names")
+dat <- dat[, setdiff(names(dat), bad_cols), drop = FALSE]
+
+cat("Loaded file:", INPUT_CSV, "\n")
+cat("Rows:", nrow(dat), "\n")
+cat("Columns:", ncol(dat), "\n\n")
+
+## -------------------------------------------------
+## basic checks
+## -------------------------------------------------
+req_cols <- c("rep_id", "k", "signal_cluster", "cluster_ordered",
+              "signal_mode", "beta", "is_null")
+miss_req <- setdiff(req_cols, names(dat))
+if (length(miss_req) > 0) {
+  stop("Missing required columns: ", paste(miss_req, collapse = ", "))
+}
+
+p_cols <- grep("^p_", names(dat), value = TRUE)
+if (length(p_cols) == 0) {
+  stop("No p-value columns found. Expected columns starting with 'p_'.")
+}
+
+cat("Detected p-value methods:\n")
+print(p_cols)
+cat("\n")
+
+## -------------------------------------------------
+## reshape to long format
+## -------------------------------------------------
+long_list <- lapply(p_cols, function(pc) {
+  data.frame(
+    rep_id = dat$rep_id,
+    k = dat$k,
+    signal_cluster = dat$signal_cluster,
+    cluster_ordered = dat$cluster_ordered,
+    cluster_abund_sum_template = if ("cluster_abund_sum_template" %in% names(dat)) dat$cluster_abund_sum_template else NA_real_,
+    cluster_n_otus_template = if ("cluster_n_otus_template" %in% names(dat)) dat$cluster_n_otus_template else NA_real_,
+    signal_mode = dat$signal_mode,
+    beta = dat$beta,
+    is_null = dat$is_null,
+    n_samples = if ("n_samples" %in% names(dat)) dat$n_samples else NA_real_,
+    y_mean = if ("y_mean" %in% names(dat)) dat$y_mean else NA_real_,
+    runtime_sec = if ("runtime_sec" %in% names(dat)) dat$runtime_sec else NA_real_,
+    method = sub("^p_", "", pc),
+    p_value = dat[[pc]],
+    stringsAsFactors = FALSE
+  )
+})
+
+long_dat <- do.call(rbind, long_list)
+rownames(long_dat) <- NULL
+
+long_dat <- long_dat[is.finite(long_dat$p_value) & !is.na(long_dat$p_value), , drop = FALSE]
+long_dat$reject <- as.integer(long_dat$p_value < ALPHA)
+long_dat$signal_mode <- factor(long_dat$signal_mode, levels = c("abundance", "prevalence", "both"))
+long_dat$is_null <- as.integer(long_dat$is_null)
+
+cat("Non-missing method-specific rows:", nrow(long_dat), "\n\n")
+
+## -------------------------------------------------
+## helpers
+## -------------------------------------------------
+fmt_num <- function(x, digits = 3) {
+  format(round(x, digits), nsmall = digits, trim = TRUE)
+}
+
+summarize_rate <- function(d, group_vars) {
+  sp <- split(d, interaction(d[, group_vars], drop = TRUE, lex.order = TRUE))
+  out <- lapply(sp, function(z) {
+    ans <- z[1, group_vars, drop = FALSE]
+    ans$n_test <- nrow(z)
+    ans$mean_p <- mean(z$p_value, na.rm = TRUE)
+    ans$median_p <- median(z$p_value, na.rm = TRUE)
+    ans$sd_p <- sd(z$p_value, na.rm = TRUE)
+    ans$reject_rate <- mean(z$reject, na.rm = TRUE)
+    ans
+  })
+  out <- do.call(rbind, out)
+  rownames(out) <- NULL
+  out
+}
+
+## -------------------------------------------------
+## printed summary tables
+## -------------------------------------------------
+
+## 1) overall run structure
+cat("========================================\n")
+cat("Overall structure\n")
+cat("========================================\n")
+cat("Unique rep_id:", length(unique(dat$rep_id)), "\n")
+cat("Unique K:", paste(sort(unique(dat$k)), collapse = ", "), "\n")
+cat("Unique signal modes:", paste(unique(as.character(dat$signal_mode)), collapse = ", "), "\n")
+cat("Unique beta:", paste(sort(unique(dat$beta)), collapse = ", "), "\n\n")
+
+cat("Rows by K x signal_mode x beta:\n")
+print(ftable(dat$k, dat$signal_mode, dat$beta))
+cat("\n")
+
+## 2) overall type I error table
+type1_tab <- summarize_rate(
+  subset(long_dat, is_null == 1 | beta == 0),
+  c("method", "signal_mode", "k")
+)
+type1_tab <- type1_tab[order(type1_tab$signal_mode, type1_tab$k, type1_tab$method), ]
+
+cat("========================================\n")
+cat("Type I error table (beta = 0)\n")
+cat("========================================\n")
+print(type1_tab)
+cat("\n")
+
+## 3) overall power table
+power_tab <- summarize_rate(
+  subset(long_dat, beta > 0),
+  c("method", "signal_mode", "k", "beta")
+)
+power_tab <- power_tab[order(power_tab$signal_mode, power_tab$k, power_tab$beta, power_tab$method), ]
+
+cat("========================================\n")
+cat("Power table (beta > 0)\n")
+cat("========================================\n")
+print(power_tab)
+cat("\n")
+
+## 4) type I error averaged over K
+type1_avg_method <- summarize_rate(
+  subset(long_dat, is_null == 1 | beta == 0),
+  c("method", "signal_mode")
+)
+type1_avg_method <- type1_avg_method[order(type1_avg_method$signal_mode, type1_avg_method$reject_rate, type1_avg_method$method), ]
+
+cat("========================================\n")
+cat("Average type I error by method and signal mode\n")
+cat("========================================\n")
+print(type1_avg_method)
+cat("\n")
+
+## 5) power averaged over K and beta
+power_avg_method <- summarize_rate(
+  subset(long_dat, beta > 0),
+  c("method", "signal_mode")
+)
+power_avg_method <- power_avg_method[order(power_avg_method$signal_mode, -power_avg_method$reject_rate, power_avg_method$method), ]
+
+cat("========================================\n")
+cat("Average power by method and signal mode\n")
+cat("========================================\n")
+print(power_avg_method)
+cat("\n")
+
+## 6) power by beta averaged over K
+power_beta_avg <- summarize_rate(
+  subset(long_dat, beta > 0),
+  c("method", "signal_mode", "beta")
+)
+power_beta_avg <- power_beta_avg[order(power_beta_avg$signal_mode, power_beta_avg$beta, -power_beta_avg$reject_rate), ]
+
+cat("========================================\n")
+cat("Average power by method, signal mode, and beta\n")
+cat("========================================\n")
+print(power_beta_avg)
+cat("\n")
+
+## 7) cluster-order effect table
+cluster_power_tab <- summarize_rate(
+  subset(long_dat, beta > 0),
+  c("method", "signal_mode", "k", "cluster_ordered", "beta")
+)
+cluster_power_tab <- cluster_power_tab[order(cluster_power_tab$signal_mode,
+                                             cluster_power_tab$k,
+                                             cluster_power_tab$beta,
+                                             cluster_power_tab$cluster_ordered,
+                                             cluster_power_tab$method), ]
+
+cat("========================================\n")
+cat("Power by ordered signal cluster\n")
+cat("========================================\n")
+print(cluster_power_tab)
+cat("\n")
+
+## 8) runtime summary
+if ("runtime_sec" %in% names(long_dat)) {
+  runtime_tab <- aggregate(runtime_sec ~ signal_mode + k, data = unique(dat[c("rep_id","setting_id","signal_mode","k","runtime_sec")]), 
+                           FUN = function(x) c(mean = mean(x, na.rm = TRUE),
+                                               median = median(x, na.rm = TRUE),
+                                               sd = sd(x, na.rm = TRUE),
+                                               min = min(x, na.rm = TRUE),
+                                               max = max(x, na.rm = TRUE)))
+  runtime_df <- data.frame(
+    signal_mode = runtime_tab$signal_mode,
+    k = runtime_tab$k,
+    mean_runtime = sapply(runtime_tab$runtime_sec, function(x) x[1]),
+    median_runtime = sapply(runtime_tab$runtime_sec, function(x) x[2]),
+    sd_runtime = sapply(runtime_tab$runtime_sec, function(x) x[3]),
+    min_runtime = sapply(runtime_tab$runtime_sec, function(x) x[4]),
+    max_runtime = sapply(runtime_tab$runtime_sec, function(x) x[5])
+  )
+  runtime_df <- runtime_df[order(runtime_df$signal_mode, runtime_df$k), ]
+
+  cat("========================================\n")
+  cat("Runtime summary by signal mode and K\n")
+  cat("========================================\n")
+  print(runtime_df)
+  cat("\n")
+}
+
+## -------------------------------------------------
+## printed compact ranking tables
+## -------------------------------------------------
+cat("========================================\n")
+cat("Best methods by average power within each signal mode\n")
+cat("========================================\n")
+split_power <- split(power_avg_method, power_avg_method$signal_mode)
+for (nm in names(split_power)) {
+  cat("\nSignal mode:", nm, "\n")
+  tmp <- split_power[[nm]][order(-split_power[[nm]]$reject_rate, split_power[[nm]]$method), ]
+  print(head(tmp, 10))
+}
+
+cat("\n========================================\n")
+cat("Methods closest to nominal type I error 0.05 within each signal mode\n")
+cat("========================================\n")
+type1_avg_method$abs_dev_from_0.05 <- abs(type1_avg_method$reject_rate - 0.05)
+split_type1 <- split(type1_avg_method, type1_avg_method$signal_mode)
+for (nm in names(split_type1)) {
+  cat("\nSignal mode:", nm, "\n")
+  tmp <- split_type1[[nm]][order(split_type1[[nm]]$abs_dev_from_0.05, split_type1[[nm]]$method), ]
+  print(head(tmp, 10))
+}
+
+## -------------------------------------------------
+## visualization
+## -------------------------------------------------
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  cat("\nggplot2 is not installed, so only printed tables were produced.\n")
+} else {
+  library(ggplot2)
+
+  ## 1) power curve by beta
+  p1 <- ggplot(
+    subset(power_tab, beta > 0),
+    aes(x = beta, y = reject_rate, group = method, color = method)
+  ) +
+    geom_line(linewidth = 0.8) +
+    geom_point(size = 1.8) +
+    facet_grid(signal_mode ~ k) +
+    labs(
+      title = "Power by effect size",
+      x = "Effect size (beta)",
+      y = paste0("Power: P(p < ", ALPHA, ")"),
+      color = "Method"
+    ) +
+    theme_bw(base_size = 12) +
+    theme(
+      strip.text = element_text(face = "bold"),
+      legend.position = "bottom"
+    )
+
+  ## 2) type I error by method
+  p2 <- ggplot(
+    type1_tab,
+    aes(x = method, y = reject_rate, color = method)
+  ) +
+    geom_hline(yintercept = ALPHA, linetype = 2) +
+    geom_point(size = 2.4) +
+    facet_grid(signal_mode ~ k) +
+    labs(
+      title = "Type I error by method",
+      x = "Method",
+      y = paste0("Type I error: P(p < ", ALPHA, ")")
+    ) +
+    theme_bw(base_size = 12) +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      strip.text = element_text(face = "bold"),
+      legend.position = "none"
+    )
+
+  ## 3) cluster-ordered power heatmap
+  p3 <- ggplot(
+    subset(cluster_power_tab, beta > 0),
+    aes(x = factor(cluster_ordered), y = method, fill = reject_rate)
+  ) +
+    geom_tile() +
+    facet_grid(signal_mode + beta ~ k) +
+    labs(
+      title = "Power by ordered signal cluster",
+      x = "Signal cluster ordered by template abundance",
+      y = "Method",
+      fill = "Power"
+    ) +
+    theme_bw(base_size = 11) +
+    theme(
+      strip.text = element_text(face = "bold")
+    )
+
+  ## 4) p-value distribution under null
+  p4 <- ggplot(
+    subset(long_dat, beta == 0),
+    aes(x = p_value, color = method, fill = method)
+  ) +
+    geom_histogram(binwidth = 0.05, position = "identity", alpha = 0.20) +
+    facet_grid(signal_mode ~ k) +
+    labs(
+      title = "Null p-value distribution",
+      x = "p-value",
+      y = "Count"
+    ) +
+    theme_bw(base_size = 12) +
+    theme(
+      strip.text = element_text(face = "bold"),
+      legend.position = "bottom"
+    )
+
+  print(p1)
+  print(p2)
+  print(p3)
+  print(p4)
+}
+```
+
+```{r}
+## save_visualizations_combined_results.R
+## read the combined csv, print summary tables, and save clear PNG figures under figs/
+
+options(stringsAsFactors = FALSE)
+
+INPUT_CSV <-"beta_div_sparse12_all_results.csv"
+FIG_DIR   <- Sys.getenv("FIG_DIR", "figs")
+ALPHA     <- 0.05
+DPI       <- 320
+
+if (!file.exists(INPUT_CSV)) {
+  stop("Combined csv not found: ", INPUT_CSV)
+}
+
+if (!requireNamespace("ggplot2", quietly = TRUE)) {
+  stop("Package 'ggplot2' is required.")
+}
+
+library(ggplot2)
+
+dir.create(FIG_DIR, recursive = TRUE, showWarnings = FALSE)
+
+dat <- read.csv(INPUT_CSV, check.names = FALSE)
+
+## remove accidental index columns if present
+bad_cols <- c("X", "...1", "row.names")
+dat <- dat[, setdiff(names(dat), bad_cols), drop = FALSE]
+
+cat("Loaded file:", INPUT_CSV, "\n")
+cat("Rows:", nrow(dat), "\n")
+cat("Columns:", ncol(dat), "\n")
+cat("Figure directory:", FIG_DIR, "\n\n")
+
+## -------------------------------------------------
+## basic checks
+## -------------------------------------------------
+req_cols <- c("rep_id", "k", "signal_cluster", "cluster_ordered",
+              "signal_mode", "beta", "is_null")
+miss_req <- setdiff(req_cols, names(dat))
+if (length(miss_req) > 0) {
+  stop("Missing required columns: ", paste(miss_req, collapse = ", "))
+}
+
+p_cols <- grep("^p_", names(dat), value = TRUE)
+if (length(p_cols) == 0) {
+  stop("No p-value columns found. Expected columns starting with 'p_'.")
+}
+
+cat("Detected methods:\n")
+print(sub("^p_", "", p_cols))
+cat("\n")
+
+## -------------------------------------------------
+## reshape to long format
+## -------------------------------------------------
+long_list <- lapply(p_cols, function(pc) {
+  data.frame(
+    rep_id = dat$rep_id,
+    k = dat$k,
+    signal_cluster = dat$signal_cluster,
+    cluster_ordered = dat$cluster_ordered,
+    cluster_abund_sum_template = if ("cluster_abund_sum_template" %in% names(dat)) dat$cluster_abund_sum_template else NA_real_,
+    cluster_n_otus_template = if ("cluster_n_otus_template" %in% names(dat)) dat$cluster_n_otus_template else NA_real_,
+    signal_mode = dat$signal_mode,
+    beta = dat$beta,
+    is_null = dat$is_null,
+    n_samples = if ("n_samples" %in% names(dat)) dat$n_samples else NA_real_,
+    y_mean = if ("y_mean" %in% names(dat)) dat$y_mean else NA_real_,
+    runtime_sec = if ("runtime_sec" %in% names(dat)) dat$runtime_sec else NA_real_,
+    method = sub("^p_", "", pc),
+    p_value = dat[[pc]],
+    stringsAsFactors = FALSE
+  )
+})
+
+long_dat <- do.call(rbind, long_list)
+rownames(long_dat) <- NULL
+long_dat <- long_dat[is.finite(long_dat$p_value) & !is.na(long_dat$p_value), , drop = FALSE]
+long_dat$reject <- as.integer(long_dat$p_value < ALPHA)
+
+## keep consistent order
+signal_mode_levels <- c("abundance", "prevalence", "both")
+signal_mode_levels <- signal_mode_levels[signal_mode_levels %in% unique(as.character(long_dat$signal_mode))]
+long_dat$signal_mode <- factor(as.character(long_dat$signal_mode), levels = signal_mode_levels)
+
+## -------------------------------------------------
+## helpers
+## -------------------------------------------------
+summarize_rate <- function(d, group_vars) {
+  sp <- split(d, interaction(d[, group_vars], drop = TRUE, lex.order = TRUE))
+  out <- lapply(sp, function(z) {
+    ans <- z[1, group_vars, drop = FALSE]
+    ans$n_test <- nrow(z)
+    ans$mean_p <- mean(z$p_value, na.rm = TRUE)
+    ans$median_p <- median(z$p_value, na.rm = TRUE)
+    ans$sd_p <- sd(z$p_value, na.rm = TRUE)
+    ans$reject_rate <- mean(z$reject, na.rm = TRUE)
+    ans
+  })
+  out <- do.call(rbind, out)
+  rownames(out) <- NULL
+  out
+}
+
+save_png <- function(plot_obj, filename, width, height, dpi = 320) {
+  out_path <- file.path(FIG_DIR, filename)
+  ggsave(
+    filename = out_path,
+    plot = plot_obj,
+    width = width,
+    height = height,
+    units = "in",
+    dpi = dpi,
+    limitsize = FALSE,
+    bg = "white"
+  )
+  cat("Saved:", out_path, "\n")
+}
+
+clean_filename_num <- function(x) {
+  gsub("\\.", "p", as.character(x))
+}
+
+## -------------------------------------------------
+## summary tables
+## -------------------------------------------------
+type1_tab <- summarize_rate(
+  subset(long_dat, is_null == 1 | beta == 0),
+  c("method", "signal_mode", "k")
+)
+type1_tab <- type1_tab[order(type1_tab$signal_mode, type1_tab$k, type1_tab$method), ]
+
+power_tab <- summarize_rate(
+  subset(long_dat, beta > 0),
+  c("method", "signal_mode", "k", "beta")
+)
+power_tab <- power_tab[order(power_tab$signal_mode, power_tab$k, power_tab$beta, power_tab$method), ]
+
+power_avg_tab <- summarize_rate(
+  subset(long_dat, beta > 0),
+  c("method", "signal_mode", "beta")
+)
+power_avg_tab <- power_avg_tab[order(power_avg_tab$signal_mode, power_avg_tab$beta, -power_avg_tab$reject_rate), ]
+
+cluster_power_tab <- summarize_rate(
+  subset(long_dat, beta > 0),
+  c("method", "signal_mode", "k", "cluster_ordered", "beta")
+)
+cluster_power_tab <- cluster_power_tab[order(cluster_power_tab$signal_mode,
+                                             cluster_power_tab$beta,
+                                             cluster_power_tab$k,
+                                             cluster_power_tab$cluster_ordered,
+                                             cluster_power_tab$method), ]
+
+cat("========================================\n")
+cat("Type I error table (beta = 0)\n")
+cat("========================================\n")
+print(type1_tab)
+cat("\n")
+
+cat("========================================\n")
+cat("Power table (beta > 0)\n")
+cat("========================================\n")
+print(power_tab)
+cat("\n")
+
+## -------------------------------------------------
+## make plots, one signal_mode per file
+## -------------------------------------------------
+for (mode_i in signal_mode_levels) {
+
+  ## ---------------- power curves ----------------
+  power_i <- subset(power_tab, signal_mode == mode_i)
+  if (nrow(power_i) > 0) {
+    ord_methods <- aggregate(reject_rate ~ method, data = power_i, FUN = mean)
+    ord_methods <- ord_methods[order(-ord_methods$reject_rate, ord_methods$method), "method"]
+    power_i$method <- factor(power_i$method, levels = ord_methods)
+
+    p_power <- ggplot(
+      power_i,
+      aes(x = beta, y = reject_rate, group = method, color = method)
+    ) +
+      geom_line(linewidth = 0.9) +
+      geom_point(size = 2.2) +
+      facet_wrap(~ k, ncol = 3) +
+      labs(
+        title = paste("Power curves -", mode_i, "signal"),
+        subtitle = "One panel per K; larger values indicate better detection",
+        x = "Effect size (beta)",
+        y = paste0("Power = P(p < ", ALPHA, ")"),
+        color = "Method"
+      ) +
+      theme_bw(base_size = 15) +
+      theme(
+        plot.title = element_text(face = "bold", size = 18),
+        plot.subtitle = element_text(size = 13),
+        strip.text = element_text(face = "bold", size = 13),
+        legend.position = "bottom",
+        legend.title = element_text(size = 12),
+        legend.text = element_text(size = 11)
+      )
+
+    save_png(
+      p_power,
+      paste0("power_curve_", mode_i, ".png"),
+      width = 16,
+      height = 11,
+      dpi = DPI
+    )
+  }
+
+  ## ---------------- type I error ----------------
+  type1_i <- subset(type1_tab, signal_mode == mode_i)
+  if (nrow(type1_i) > 0) {
+    ord_methods <- aggregate(reject_rate ~ method, data = type1_i, FUN = mean)
+    ord_methods <- ord_methods[order(ord_methods$reject_rate, ord_methods$method), "method"]
+    type1_i$method <- factor(type1_i$method, levels = ord_methods)
+
+    p_type1 <- ggplot(
+      type1_i,
+      aes(x = method, y = reject_rate)
+    ) +
+      geom_hline(yintercept = ALPHA, linetype = 2, linewidth = 0.8) +
+      geom_point(size = 3) +
+      facet_wrap(~ k, ncol = 3) +
+      labs(
+        title = paste("Type I error -", mode_i, "signal"),
+        subtitle = "Dashed line marks nominal 0.05 level",
+        x = "Method",
+        y = paste0("Type I error = P(p < ", ALPHA, ")")
+      ) +
+      theme_bw(base_size = 15) +
+      theme(
+        plot.title = element_text(face = "bold", size = 18),
+        plot.subtitle = element_text(size = 13),
+        strip.text = element_text(face = "bold", size = 13),
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+      )
+
+    save_png(
+      p_type1,
+      paste0("type1_error_", mode_i, ".png"),
+      width = 16,
+      height = 11,
+      dpi = DPI
+    )
+  }
+
+  ## ---------------- average power heatmap ----------------
+  power_avg_i <- subset(power_avg_tab, signal_mode == mode_i)
+  if (nrow(power_avg_i) > 0) {
+    ord_methods <- aggregate(reject_rate ~ method, data = power_avg_i, FUN = mean)
+    ord_methods <- ord_methods[order(-ord_methods$reject_rate, ord_methods$method), "method"]
+    power_avg_i$method <- factor(power_avg_i$method, levels = rev(ord_methods))
+
+    p_heat <- ggplot(
+      power_avg_i,
+      aes(x = factor(beta), y = method, fill = reject_rate)
+    ) +
+      geom_tile() +
+      geom_text(aes(label = sprintf("%.2f", reject_rate)), size = 4) +
+      labs(
+        title = paste("Average power heatmap -", mode_i, "signal"),
+        subtitle = "Averaged over K; numbers inside tiles are empirical power",
+        x = "Effect size (beta)",
+        y = "Method",
+        fill = "Power"
+      ) +
+      theme_bw(base_size = 15) +
+      theme(
+        plot.title = element_text(face = "bold", size = 18),
+        plot.subtitle = element_text(size = 13),
+        axis.text.y = element_text(size = 12)
+      )
+
+    save_png(
+      p_heat,
+      paste0("power_heatmap_avg_", mode_i, ".png"),
+      width = 12,
+      height = 8.5,
+      dpi = DPI
+    )
+  }
+
+  ## ---------------- null p-value histogram ----------------
+  null_i <- subset(long_dat, signal_mode == mode_i & (beta == 0 | is_null == 1))
+  if (nrow(null_i) > 0) {
+    p_null <- ggplot(
+      null_i,
+      aes(x = p_value)
+    ) +
+      geom_histogram(binwidth = 0.05, boundary = 0, closed = "left") +
+      facet_grid(method ~ k) +
+      labs(
+        title = paste("Null p-value distribution -", mode_i, "signal"),
+        subtitle = "Uniform-looking histograms indicate reasonable calibration",
+        x = "p-value",
+        y = "Count"
+      ) +
+      theme_bw(base_size = 13) +
+      theme(
+        plot.title = element_text(face = "bold", size = 18),
+        plot.subtitle = element_text(size = 13),
+        strip.text = element_text(size = 11)
+      )
+
+    save_png(
+      p_null,
+      paste0("null_pvalue_hist_", mode_i, ".png"),
+      width = 18,
+      height = 18,
+      dpi = DPI
+    )
+  }
+
+  ## ---------------- cluster-order heatmap by beta ----------------
+  cluster_i <- subset(cluster_power_tab, signal_mode == mode_i)
+  if (nrow(cluster_i) > 0) {
+    betas_i <- sort(unique(cluster_i$beta))
+    betas_i <- betas_i[betas_i > 0]
+
+    for (b in betas_i) {
+      cluster_ib <- subset(cluster_i, beta == b)
+
+      ord_methods <- aggregate(reject_rate ~ method, data = cluster_ib, FUN = mean)
+      ord_methods <- ord_methods[order(-ord_methods$reject_rate, ord_methods$method), "method"]
+      cluster_ib$method <- factor(cluster_ib$method, levels = rev(ord_methods))
+
+      p_cluster <- ggplot(
+        cluster_ib,
+        aes(x = factor(cluster_ordered), y = method, fill = reject_rate)
+      ) +
+        geom_tile() +
+        facet_wrap(~ k, ncol = 3) +
+        labs(
+          title = paste("Power by ordered signal cluster -", mode_i, "signal"),
+          subtitle = paste("beta =", b, "| clusters ordered by template abundance"),
+          x = "Ordered signal cluster",
+          y = "Method",
+          fill = "Power"
+        ) +
+        theme_bw(base_size = 15) +
+        theme(
+          plot.title = element_text(face = "bold", size = 18),
+          plot.subtitle = element_text(size = 13),
+          strip.text = element_text(face = "bold", size = 13)
+        )
+
+      save_png(
+        p_cluster,
+        paste0("cluster_power_", mode_i, "_beta_", clean_filename_num(b), ".png"),
+        width = 16,
+        height = 11,
+        dpi = DPI
+      )
+    }
+  }
+}
+
+cat("\nAll figures were saved under:\n", FIG_DIR, "\n", sep = "")
+```
+
